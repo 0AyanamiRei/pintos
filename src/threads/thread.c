@@ -82,8 +82,7 @@ static tid_t allocate_tid (void);
    It is not safe to call thread_current() until this function
    finishes. */
 void
-thread_init (void) 
-{
+thread_init (void) {
   ASSERT (intr_get_level () == INTR_OFF);
 
   lock_init (&tid_lock);
@@ -208,6 +207,7 @@ thread_create (const char  *name,
   return tid;
 }
 
+
 /**
  * @brief Puts the current thread to sleep.
  * 
@@ -238,9 +238,9 @@ thread_block (void) {
    it may expect that it can atomically unblock a thread and
    update other data. */
 void
-thread_unblock (struct thread *t) 
-{
+thread_unblock (struct thread *t) {
   enum intr_level old_level;
+  bool old_context = intr_context();
 
   ASSERT (is_thread (t));
 
@@ -248,6 +248,17 @@ thread_unblock (struct thread *t)
   ASSERT (t->status == THREAD_BLOCKED);
   list_push_back (&ready_list, &t->elem);
   t->status = THREAD_READY;
+
+  if(t->priority > thread_current()->priority) {
+    if(old_context) {
+      intr_yield_on_return();
+    } else {
+      if (thread_current()->tid != 2){
+        thread_yield();
+      }
+    }
+  }
+
   intr_set_level (old_level);
 }
 
@@ -466,6 +477,7 @@ is_thread (struct thread *t)
 /** Does basic initialization of T as a blocked thread named
    NAME. */
 
+
 /**
  * @brief init thread's name,priority,magic and set thread's status to block.join the thread to all list 
 
@@ -526,10 +538,22 @@ alloc_frame (struct thread *t, size_t size)
 */
 static struct thread *
 next_thread_to_run (void) {
+  struct list_elem *e;
+  struct thread *t_ret = NULL; 
+
   if (list_empty (&ready_list)){
     return idle_thread;
   } else {
-    return list_entry (list_pop_front (&ready_list), struct thread, elem);
+    //return list_entry (list_pop_front (&ready_list), struct thread, elem);
+    
+    for (e = list_begin (&ready_list); e != list_end (&ready_list); e = list_next (e)) {
+      struct thread *t = list_entry (e, struct thread, elem);
+      if (t_ret == NULL || t_ret->priority < t->priority) {
+        t_ret = t;
+      }
+    }
+    list_remove(&t_ret->elem);
+    return t_ret;
   }
 }
 

@@ -24,6 +24,8 @@
     "interrupt.h": "c",
     "synch.h": "c",
     "list.h": "c",
-    "numbers": "c"
+    "numbers": "c",
+    "random.h": "c",
+    "stddef.h": "c"
   }
 }

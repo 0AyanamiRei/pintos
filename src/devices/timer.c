@@ -188,44 +188,28 @@ timer_print_stats (void)
 
 
 /**
- * @todo delete the intr_disable, test will wrong:
- *       `assertion `t->status == THREAD_BLOCKED' failed.`
- * 
- * @todo add code `ASSERT(intr_get_level() == INTR_OFF);`
- *       it can pass.
+ * @brief Wake up a thread, if it has called `sleep()` into blocked
 */
 static void
 sleep_wake_up_(struct thread *t, void *aux) {
-
-  //ASSERT(intr_get_level() == INTR_OFF);
-  //enum intr_level old_level;
-  //old_level = intr_disable ();
-
   if(t->status != THREAD_BLOCKED || t->sleep_intervals_ == -1 || t->sleep_time_ == -1) {
-    //intr_set_level (old_level);
     return;
   }
 
   if(++(t->sleep_time_) >= t->sleep_intervals_) {
     t->sleep_intervals_ = -1;
     t->sleep_time_ = -1;
-
     thread_unblock(t);
-
-    //intr_set_level (old_level);
   }
-  //intr_set_level (old_level);
 }
 
 
 /** Timer interrupt handler. */
 static void
-timer_interrupt (struct intr_frame *args UNUSED)
-{
+timer_interrupt (struct intr_frame *args UNUSED) {
   ticks++;
   thread_tick ();
 
-  // wake_up_();
   thread_foreach(sleep_wake_up_, NULL);
 }
 

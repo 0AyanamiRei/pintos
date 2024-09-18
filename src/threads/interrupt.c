@@ -273,6 +273,18 @@ intr_context (void) {
   return in_external_intr;
 }
 
+/** @brief change the state `in_external_intr` to false */
+void 
+intr_set_false (void) {
+  in_external_intr = false;
+}
+
+/** @brief change the state `in_external_intr` to true */
+void
+intr_set_true (void) {
+  in_external_intr = true;
+}
+
 /** During processing of an external interrupt, directs the
    interrupt handler to yield to a new process just before
    returning from the interrupt.  May not be called at any other
@@ -427,6 +439,9 @@ make_idtr_operand (uint16_t limit, void *base) {
  * intr-stubs.S.  FRAME describes the interrupt and the 
  * interrupted thread's registers.
  * 
+ * @note before call `intr_handler()`
+ * @note - 
+ * 
  * @todo Explain why create the  local variables `in_external_intr` and
  *       `yield_on_return` in external interrupt.
 */
@@ -450,7 +465,7 @@ intr_handler (struct intr_frame *frame) {
 
   /* Invoke the interrupt's handler. */
   handler = intr_handlers[frame->vec_no];
-
+  
   if (handler != NULL){
     handler (frame);
   } else if (frame->vec_no == 0x27 || frame->vec_no == 0x2f) {
