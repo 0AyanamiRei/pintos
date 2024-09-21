@@ -163,7 +163,6 @@ thread_print_stats (void)
    The code provided sets the new thread's `priority' member to
    PRIORITY, but no actual priority scheduling is implemented.
    Priority scheduling is the goal of Problem 1-3. */
-
 tid_t
 thread_create (const char  *name,
                int         priority,
@@ -257,7 +256,7 @@ thread_unblock (struct thread *t) {
     if(old_context) {
       intr_yield_on_return();
     } else {
-      if (thread_current()->tid != 2){
+      if (!strcmp(thread_current()->name, "idle")){
         thread_yield();
       }
     }
@@ -356,14 +355,15 @@ thread_foreach (thread_action_func *func, void *aux) {
   }
 }
 
-/** Sets the current thread's priority to NEW_PRIORITY. */
+/** 
+ * @brief Sets the current thread's priority to `new_priority`.
+ * 
+ * If a thread changed
+*/
 void
-thread_set_priority (int new_priority) 
-{
+thread_set_priority (int new_priority)  {
   thread_current ()->priority = new_priority;
   
-
-
   for (struct list_elem* e = list_begin (&ready_list); e != list_end (&ready_list); e = list_next (e)) {
     struct thread *t = list_entry (e, struct thread, elem);
     if (new_priority < t->priority) {
