@@ -225,10 +225,12 @@ donate_priority (struct lock *lock) {
   }
   
   if(from->priority > to->priority){
-    lock->holder->temp_priority[lock->index] = lock->holder->priority;
+    if(!lock->holder->temp_priority[lock->index]) {
+      lock->holder->temp_priority[lock->index] = lock->holder->priority;
+    }
     lock->holder->priority = from->priority;
   }
-  
+
   intr_set_level(old_level);
 }
 
