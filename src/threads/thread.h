@@ -122,4 +122,7 @@ int thread_get_load_avg (void);
 /** Alarm Clock */
 void wake_up_(void);
 
+/**Donate Priority*/
+void donate_priority(struct thread*);
+
 #endif /**< threads/thread.h */

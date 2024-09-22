@@ -368,7 +368,7 @@ thread_set_priority (int new_priority)  {
     struct thread *t = list_entry (e, struct thread, elem);
     if (new_priority < t->priority) {
       thread_yield();
-      e = &ready_list.head;
+      e = &ready_list.head; /** wake up from `thread_yield()`, check list again */
     }
   }
 }
@@ -689,8 +689,9 @@ allocate_tid (void)
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
 
-
-void wake_up_(void) {
+/** abolished */
+void
+wake_up_(void) {
   struct list_elem *e;
   struct thread *t;
   struct thread *t_numpy[128];
@@ -727,4 +728,14 @@ void wake_up_(void) {
       thread_unblock(t);
     }
   }
+}
+
+
+/** */
+void
+donate_priority(struct thread* t) {
+  struct thread* curr = thread_current();
+  int priority = curr->priority;
+
+  /** find t in ready_list */
 }
