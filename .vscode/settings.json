@@ -26,6 +26,7 @@
     "list.h": "c",
     "numbers": "c",
     "random.h": "c",
-    "stddef.h": "c"
+    "stddef.h": "c",
+    "tests.h": "c"
   }
 }

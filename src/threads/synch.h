@@ -32,6 +32,7 @@ void sema_self_test (void);
 struct lock {
   struct thread *holder;
   struct semaphore semaphore;
+  int index;
 };
 
 void lock_init (struct lock *);

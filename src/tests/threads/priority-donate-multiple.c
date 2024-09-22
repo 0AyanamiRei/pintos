@@ -44,6 +44,7 @@ test_priority_donate_multiple (void)
        PRI_DEFAULT + 2, thread_get_priority ());
 
   lock_release (&b);
+  
   msg ("Thread b should have just finished.");
   msg ("Main thread should have priority %d.  Actual priority: %d.",
        PRI_DEFAULT + 1, thread_get_priority ());

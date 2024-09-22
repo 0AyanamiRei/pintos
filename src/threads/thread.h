@@ -75,6 +75,9 @@ struct thread {
   uint32_t *pagedir;                  /**< Page directory. */
   #endif
 
+  int temp_priority[3];
+  int k;
+  
   int64_t sleep_time_;
   int64_t sleep_intervals_;
 
@@ -121,8 +124,5 @@ int thread_get_load_avg (void);
 
 /** Alarm Clock */
 void wake_up_(void);
-
-/**Donate Priority*/
-void donate_priority(struct thread*);
 
 #endif /**< threads/thread.h */

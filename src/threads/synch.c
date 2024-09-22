@@ -1,31 +1,3 @@
-/** This file is derived from source code for the Nachos
-   instructional operating system.  The Nachos copyright notice
-   is reproduced in full below. */
-
-/** Copyright (c) 1992-1996 The Regents of the University of California.
-   All rights reserved.
-
-   Permission to use, copy, modify, and distribute this software
-   and its documentation for any purpose, without fee, and
-   without written agreement is hereby granted, provided that the
-   above copyright notice and the following two paragraphs appear
-   in all copies of this software.
-
-   IN NO EVENT SHALL THE UNIVERSITY OF CALIFORNIA BE LIABLE TO
-   ANY PARTY FOR DIRECT, INDIRECT, SPECIAL, INCIDENTAL, OR
-   CONSEQUENTIAL DAMAGES ARISING OUT OF THE USE OF THIS SOFTWARE
-   AND ITS DOCUMENTATION, EVEN IF THE UNIVERSITY OF CALIFORNIA
-   HAS BEEN ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
-   THE UNIVERSITY OF CALIFORNIA SPECIFICALLY DISCLAIMS ANY
-   WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-   WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-   PURPOSE.  THE SOFTWARE PROVIDED HEREUNDER IS ON AN "AS IS"
-   BASIS, AND THE UNIVERSITY OF CALIFORNIA HAS NO OBLIGATION TO
-   PROVIDE MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR
-   MODIFICATIONS.
-*/
-
 #include "threads/synch.h"
 #include <stdio.h>
 #include <string.h>
@@ -149,11 +121,21 @@ sema_up (struct semaphore *sema) {
 
   old_level = intr_disable ();
 
-  if (!list_empty (&sema->waiters)) {
-    thread_unblock (list_entry(list_pop_front(&sema->waiters), struct thread, elem));
-  }
-
   sema->value++;
+
+  if (!list_empty (&sema->waiters)) {
+    /** choose higest priority thread to unblock */
+    struct list_elem *e;
+    struct thread *t, *ret_t = NULL;
+    for (e = list_begin(&sema->waiters); e != list_end (&sema->waiters); e = list_next (e)) {
+      t = list_entry(e, struct thread, elem);
+      if(ret_t == NULL || ret_t->priority < t->priority){
+        ret_t = t;
+      }
+    }
+    list_remove(&ret_t->elem);
+    thread_unblock(ret_t);
+  }
 
   intr_set_level (old_level);
 }
@@ -218,10 +200,37 @@ lock_init (struct lock *lock) {
   ASSERT (lock != NULL);
 
   lock->holder = NULL;
+  lock->index = -1;
   sema_init(&lock->semaphore, 1);
 }
 
+/**
+ * @brief Donate current thread's priority, if to's priority
+ *        less than current's.
+ * 
+ * @note If needed, we donate the `from`'s priority to `to`
+*/
+void
+donate_priority (struct lock *lock) {
+  enum intr_level old_level;
+  old_level = intr_disable();
 
+  struct thread* to = lock->holder;
+  struct thread* from = thread_current();
+
+  /** now we just store one times */
+  /** @todo store the max priority in lock's wait list */
+  if(lock->index == -1){
+    lock->index = ++to->k;
+  }
+  
+  if(from->priority > to->priority){
+    lock->holder->temp_priority[lock->index] = lock->holder->priority;
+    lock->holder->priority = from->priority;
+  }
+  
+  intr_set_level(old_level);
+}
 
 /**
  * @brief Acquires lock for the current thread, first waiting for
@@ -246,8 +255,9 @@ lock_acquire (struct lock *lock) {
   ASSERT (!intr_context ());
   ASSERT (!lock_held_by_current_thread (lock));
 
-  struct thread* locker = lock->holder;
-  donate_priority(locker);
+  if(lock->holder != NULL)  {
+    donate_priority(lock);
+  }
 
   sema_down (&lock->semaphore);
   lock->holder = thread_current ();
@@ -301,8 +311,15 @@ void
 lock_release (struct lock *lock) {
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
+  
+  struct thread* t = lock->holder;
 
+  if(lock->index != -1){
+    lock->holder->priority = lock->holder->temp_priority[lock->index];
+    lock->index = -1;
+  }
   lock->holder = NULL;
+
   sema_up (&lock->semaphore);
 }
 

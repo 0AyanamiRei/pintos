@@ -97,6 +97,7 @@ thread_init (void) {
   
   initial_thread->sleep_intervals_ = -1;
   initial_thread->sleep_time_ = -1;
+  initial_thread->k = 0;
 }
 
 /** Starts preemptive thread scheduling by enabling interrupts.
@@ -163,6 +164,7 @@ thread_print_stats (void)
    The code provided sets the new thread's `priority' member to
    PRIORITY, but no actual priority scheduling is implemented.
    Priority scheduling is the goal of Problem 1-3. */
+
 tid_t
 thread_create (const char  *name,
                int         priority,
@@ -256,7 +258,7 @@ thread_unblock (struct thread *t) {
     if(old_context) {
       intr_yield_on_return();
     } else {
-      if (!strcmp(thread_current()->name, "idle")){
+      if (thread_current()->tid != 2){
         thread_yield();
       }
     }
@@ -355,20 +357,16 @@ thread_foreach (thread_action_func *func, void *aux) {
   }
 }
 
-/** 
- * @brief Sets the current thread's priority to `new_priority`.
- * 
- * If a thread changed
-*/
+/** Sets the current thread's priority to NEW_PRIORITY. */
 void
-thread_set_priority (int new_priority)  {
+thread_set_priority (int new_priority) 
+{
   thread_current ()->priority = new_priority;
-  
   for (struct list_elem* e = list_begin (&ready_list); e != list_end (&ready_list); e = list_next (e)) {
     struct thread *t = list_entry (e, struct thread, elem);
     if (new_priority < t->priority) {
       thread_yield();
-      e = &ready_list.head; /** wake up from `thread_yield()`, check list again */
+      e = &ready_list.head;
     }
   }
 }
@@ -517,6 +515,9 @@ init_thread (struct thread *t, const char *name, int priority)
   /* initilize param used to sleep */
   t->sleep_intervals_ = -1;
   t->sleep_time_ = -1;
+
+  /** initilize param used to priority-donate */
+  t->k = -1;
 
   list_push_back (&all_list, &t->allelem);
   intr_set_level (old_level);
@@ -689,9 +690,8 @@ allocate_tid (void)
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
 
-/** abolished */
-void
-wake_up_(void) {
+
+void wake_up_(void) {
   struct list_elem *e;
   struct thread *t;
   struct thread *t_numpy[128];
@@ -728,14 +728,5 @@ wake_up_(void) {
       thread_unblock(t);
     }
   }
-}
 
-
-/** */
-void
-donate_priority(struct thread* t) {
-  struct thread* curr = thread_current();
-  int priority = curr->priority;
-
-  /** find t in ready_list */
 }
