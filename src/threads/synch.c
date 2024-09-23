@@ -116,11 +116,8 @@ sema_try_down (struct semaphore *sema) {
 void
 sema_up (struct semaphore *sema) {
   enum intr_level old_level;
-
   ASSERT (sema != NULL);
-
   old_level = intr_disable ();
-
   sema->value++;
 
   if (!list_empty (&sema->waiters)) {
@@ -136,7 +133,6 @@ sema_up (struct semaphore *sema) {
     list_remove(&ret_t->elem);
     thread_unblock(ret_t);
   }
-
   intr_set_level (old_level);
 }
 
@@ -241,10 +237,16 @@ donate_priority (struct lock *lock, struct thread* from) {
     to->priority = from->priority;
 
     /** 如果持锁线程曾捐赠过优先级, 需要递归更新优先级 */
-    if(to->block_lock != NULL) {
+    while(to->block_lock != NULL) {
       to->block_lock->holder->priority = from->priority;
-      donate_priority(to->block_lock, to);
+      from = to;
+      to = to->block_lock->holder;
     }
+
+    // if(to->block_lock != NULL) {
+    //   to->block_lock->holder->priority = from->priority;
+    //   donate_priority(to->block_lock, to);
+    // }
   }
 
   intr_set_level(old_level);
@@ -484,6 +486,23 @@ cond_wait (struct condition *cond,
   lock_acquire (lock);
 }
 
+struct thread*
+max_in_sema(struct semaphore *sema) {
+  ASSERT (sema != NULL);
+
+  struct list_elem *e;
+  struct thread *t, *ret_t = NULL;
+
+  if (!list_empty (&sema->waiters)) {
+    for (e = list_begin(&sema->waiters); e != list_end (&sema->waiters); e = list_next (e)) {
+      t = list_entry(e, struct thread, elem);
+      if(ret_t == NULL || ret_t->priority < t->priority){
+        ret_t = t;
+      }
+    }
+  }
+  return ret_t;
+}
 
 /**
  * @brief
@@ -503,16 +522,57 @@ cond_signal (struct condition *cond,
   ASSERT (!intr_context ());
   ASSERT (lock_held_by_current_thread (lock));
 
-  if (!list_empty (&cond->waiters)) {
-    sema_up (&list_entry(list_pop_front(&cond->waiters), struct semaphore_elem, elem)->semaphore);
-  }
 
-  /** @details
-   * The expression `list_entry(LIST_ELEM*, STRUCT, MEMBER)` used to get a pointer,
-   * refer to the outside struct `semaphore_elem`
-  */
+  if (!list_empty (&cond->waiters)) {
+    enum intr_level old_level;
+    old_level = intr_disable ();
+
+    struct thread *t = NULL;
+    struct list_elem *e, *e_ret;
+    struct semaphore *sema, *ret_sema;
+
+    // sema_up (&list_entry(list_pop_front(&cond->waiters), struct semaphore_elem, elem)->semaphore);
+
+    // /** 扫描所有信号量 */
+    for (e = list_begin(&cond->waiters); e != list_end(&cond->waiters); e = list_next(e)){
+      sema = &list_entry(e, struct semaphore_elem, elem)->semaphore;
+      struct thread* temp = max_in_sema(sema);
+      if(t == NULL || temp->priority > t->priority) {
+        e_ret = e;
+        t = temp;
+        ret_sema = sema;
+      }
+    }
+
+    ret_sema->value++;
+    list_remove(&t->elem);
+    list_remove(e_ret);
+    thread_unblock(t);
+
+    intr_set_level (old_level);
+  }
 }
 
+/*  enum intr_level old_level;
+  ASSERT (sema != NULL);
+  old_level = intr_disable ();
+  sema->value++;
+
+  if (!list_empty (&sema->waiters)) {
+    struct list_elem *e;
+    struct thread *t, *ret_t = NULL;
+    for (e = list_begin(&sema->waiters); e != list_end (&sema->waiters); e = list_next (e)) {
+      t = list_entry(e, struct thread, elem);
+      if(ret_t == NULL || ret_t->priority < t->priority){
+        ret_t = t;
+      }
+    }
+    list_remove(&ret_t->elem);
+    thread_unblock(ret_t);
+  }
+  intr_set_level (old_level);
+
+*/
 
 /**
  * @brief The "broadcast" version of `cond_signal`.

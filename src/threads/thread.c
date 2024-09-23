@@ -361,12 +361,22 @@ thread_foreach (thread_action_func *func, void *aux) {
 void
 thread_set_priority (int new_priority) 
 {
-  thread_current ()->priority = new_priority;
-  for (struct list_elem* e = list_begin (&ready_list); e != list_end (&ready_list); e = list_next (e)) {
-    struct thread *t = list_entry (e, struct thread, elem);
-    if (new_priority < t->priority) {
-      thread_yield();
-      e = &ready_list.head;
+  struct thread *t = thread_current();
+
+  /** 处理捐赠优先级的中途 */
+  if(t->donate_nums) {
+    for(int i = 0; i < MAXLOCKS; i ++) {
+      t->temp_priority[i] = (t->temp_priority[i] == -1) ? -1 : new_priority; 
+      t->first_priority = new_priority;
+    }
+  } else {
+    thread_current ()->priority = new_priority;
+    for (struct list_elem* e = list_begin (&ready_list); e != list_end (&ready_list); e = list_next (e)) {
+      struct thread *t = list_entry (e, struct thread, elem);
+      if (new_priority < t->priority) {
+        thread_yield();
+        e = &ready_list.head;
+      }
     }
   }
 }
