@@ -211,27 +211,40 @@ lock_init (struct lock *lock) {
  * @note If needed, we donate the `from`'s priority to `to`
 */
 void
-donate_priority (struct lock *lock) {
+donate_priority (struct lock *lock, struct thread* from) {
   enum intr_level old_level;
   old_level = intr_disable();
 
   struct thread* to = lock->holder;
-  struct thread* from = thread_current();
-
   /** @todo store the max priority in lock's wait list */
   
+  /** 持锁线程优先级更低 */
   if(from->priority > to->priority) {
+    /** 记录持锁线程的旧值, 每把锁仅记录一次 */
     if(lock->index == -1){
       lock->index = ++to->k;
       to->temp_priority[lock->index] = to->priority;
       to->donate_nums ++;
     }
 
+    /** 记录持锁线程最初的优先级 */
     if(to->first_priority == -1) {
       to->first_priority = to->priority;
     }
 
+    /** 被阻塞线程记录阻塞的锁 */
+    if(from->block_lock == NULL){
+      from->block_lock = lock;
+    }
+
+    /** 传递高优先级给持锁线程*/
     to->priority = from->priority;
+
+    /** 如果持锁线程曾捐赠过优先级, 需要递归更新优先级 */
+    if(to->block_lock != NULL) {
+      to->block_lock->holder->priority = from->priority;
+      donate_priority(to->block_lock, to);
+    }
   }
 
   intr_set_level(old_level);
@@ -261,7 +274,7 @@ lock_acquire (struct lock *lock) {
   ASSERT (!lock_held_by_current_thread (lock));
 
   if(lock->holder != NULL)  {
-    donate_priority(lock);
+    donate_priority(lock, thread_current());
   }
 
   sema_down (&lock->semaphore);

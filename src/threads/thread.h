@@ -75,6 +75,7 @@ struct thread {
   uint32_t *pagedir;                  /**< Page directory. */
   #endif
   
+  struct lock* block_lock;
   int donate_nums;
   int first_priority;
   int temp_priority[MAXLOCKS];

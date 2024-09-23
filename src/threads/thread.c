@@ -523,6 +523,7 @@ init_thread (struct thread *t, const char *name, int priority)
     t->temp_priority[i] = -1;
   }
   t->donate_nums = 0;
+  // t->block_lock = NULL;
 
   list_push_back (&all_list, &t->allelem);
   intr_set_level (old_level);
