@@ -95,9 +95,9 @@ thread_init (void) {
   initial_thread->status = THREAD_RUNNING;
   initial_thread->tid = allocate_tid ();
   
-  initial_thread->sleep_intervals_ = -1;
-  initial_thread->sleep_time_ = -1;
-  initial_thread->k = 0;
+  // initial_thread->sleep_intervals_ = -1;
+  // initial_thread->sleep_time_ = -1;
+  // initial_thread->k = 0;
 }
 
 /** Starts preemptive thread scheduling by enabling interrupts.
@@ -518,6 +518,11 @@ init_thread (struct thread *t, const char *name, int priority)
 
   /** initilize param used to priority-donate */
   t->k = -1;
+  t->first_priority = -1;
+  for(int i = 0; i < MAXLOCKS; i ++){
+    t->temp_priority[i] = -1;
+  }
+  t->donate_nums = 0;
 
   list_push_back (&all_list, &t->allelem);
   intr_set_level (old_level);

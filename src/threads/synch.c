@@ -218,17 +218,20 @@ donate_priority (struct lock *lock) {
   struct thread* to = lock->holder;
   struct thread* from = thread_current();
 
-  /** now we just store one times */
   /** @todo store the max priority in lock's wait list */
-  if(lock->index == -1){
-    lock->index = ++to->k;
-  }
   
-  if(from->priority > to->priority){
-    if(!lock->holder->temp_priority[lock->index]) {
-      lock->holder->temp_priority[lock->index] = lock->holder->priority;
+  if(from->priority > to->priority) {
+    if(lock->index == -1){
+      lock->index = ++to->k;
+      to->temp_priority[lock->index] = to->priority;
+      to->donate_nums ++;
     }
-    lock->holder->priority = from->priority;
+
+    if(to->first_priority == -1) {
+      to->first_priority = to->priority;
+    }
+
+    to->priority = from->priority;
   }
 
   intr_set_level(old_level);
@@ -316,10 +319,45 @@ lock_release (struct lock *lock) {
   
   struct thread* t = lock->holder;
 
-  if(lock->index != -1){
-    lock->holder->priority = lock->holder->temp_priority[lock->index];
-    lock->index = -1;
+  /** 无捐赠优先级*/
+  if(!t->donate_nums) {
+    ;
+  } else { /** 处理捐赠记录 */
+    int max_index = 0; /** 捐赠记录最大值下标 */
+    for(int i = 0; i < MAXLOCKS; i ++){
+      if(t->temp_priority[max_index] < t->temp_priority[i]){
+        max_index = i;
+      }
+    }
+
+    if(lock->index != -1) {
+      if(--(t->donate_nums) == 0){ /** 释放最后一个带捐赠的锁 */
+        t->priority = t->first_priority;
+        t->first_priority = -1;
+      } else { /** 不是最后一个带捐赠记录的锁 */
+      /** 如果当前锁记录的捐赠优先级是最高的那么就需要复原
+       *  否则不复原持锁线程优先级, 而是把等待队列中的线程加入ready_list
+      */
+        if(max_index == lock->index) {
+          t->priority = t->temp_priority[lock->index];
+        } else {
+          struct list_elem* e;
+          struct thread* t;
+          struct list* l = &lock->semaphore.waiters;
+          for(e = list_head(l); e != list_head(l); e = e->next) {
+            t = list_entry(e, struct thread, elem);
+            thread_unblock(t);
+            list_remove(e);
+          }
+        }
+      }
+      /** 不管如何都要清空这把锁的记录 */
+      t->temp_priority[lock->index] = -1;
+      lock->index = -1;
+    }
   }
+
+
   lock->holder = NULL;
 
   sema_up (&lock->semaphore);

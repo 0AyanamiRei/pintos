@@ -74,8 +74,10 @@ struct thread {
   /* Owned by userprog/process.c. */
   uint32_t *pagedir;                  /**< Page directory. */
   #endif
-
-  int temp_priority[3];
+  
+  int donate_nums;
+  int first_priority;
+  int temp_priority[MAXLOCKS];
   int k;
   
   int64_t sleep_time_;

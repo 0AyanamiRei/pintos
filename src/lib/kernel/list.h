@@ -86,6 +86,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#define MAXLOCKS 8
+
 /** List element. */
 struct list_elem 
   {
