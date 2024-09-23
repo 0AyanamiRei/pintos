@@ -24,6 +24,36 @@ struct locks
 static thread_func medium_thread_func;
 static thread_func high_thread_func;
 
+/*
+Acceptable output:
+  (priority-donate-nest) begin
+  (priority-donate-nest) Low thread should have priority 32.  Actual priority: 32.
+  (priority-donate-nest) Low thread should have priority 33.  Actual priority: 33.
+  (priority-donate-nest) Medium thread should have priority 33.  Actual priority: 33.
+  (priority-donate-nest) Medium thread got the lock.
+  (priority-donate-nest) High thread got the lock.
+  (priority-donate-nest) High thread finished.
+  (priority-donate-nest) High thread should have just finished.
+  (priority-donate-nest) Middle thread finished.
+  (priority-donate-nest) Medium thread should just have finished.
+  (priority-donate-nest) Low thread should have priority 31.  Actual priority: 31.
+  (priority-donate-nest) end
+Differences in `diff -u' format:
+  (priority-donate-nest) begin
+  (priority-donate-nest) Low thread should have priority 32.  Actual priority: 32.
+- (priority-donate-nest) Low thread should have priority 33.  Actual priority: 33.
++ (priority-donate-nest) Low thread should have priority 33.  Actual priority: 32.
+  (priority-donate-nest) Medium thread should have priority 33.  Actual priority: 33.
+  (priority-donate-nest) Medium thread got the lock.
+  (priority-donate-nest) High thread got the lock.
+  (priority-donate-nest) High thread finished.
+  (priority-donate-nest) High thread should have just finished.
+  (priority-donate-nest) Middle thread finished.
+  (priority-donate-nest) Medium thread should just have finished.
+  (priority-donate-nest) Low thread should have priority 31.  Actual priority: 31.
+  (priority-donate-nest) end
+*/
+
 void
 test_priority_donate_nest (void) 
 {
@@ -43,6 +73,7 @@ test_priority_donate_nest (void)
 
   locks.a = &a;
   locks.b = &b;
+
   thread_create ("medium", PRI_DEFAULT + 1, medium_thread_func, &locks);
   thread_yield ();
   msg ("Low thread should have priority %d.  Actual priority: %d.",
@@ -54,6 +85,7 @@ test_priority_donate_nest (void)
        PRI_DEFAULT + 2, thread_get_priority ());
 
   lock_release (&a);
+
   thread_yield ();
   msg ("Medium thread should just have finished.");
   msg ("Low thread should have priority %d.  Actual priority: %d.",
