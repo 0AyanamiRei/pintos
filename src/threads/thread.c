@@ -15,6 +15,8 @@
 #include "userprog/process.h"
 #endif
 
+#include "fix-point.h"
+
 #define THREAD_MAGIC 0xcd6abf4b
 
 /** List of processes in THREAD_READY state, that is, processes

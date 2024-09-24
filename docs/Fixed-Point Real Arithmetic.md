@@ -51,29 +51,28 @@
 
 
 #### 完整运算图
-```
-Convert n to fixed point: n * f
 
-Convert x to integer (rounding toward zero): x / f
 
-Convert x to integer (rounding to nearest): 
-(x + f / 2) / f if x >= 0,
-(x - f / 2) / f if x < 0.
+- Convert n to fixed point: `n * f`
 
-Add x and y: x + y
+- Convert x to integer (rounding toward zero): `x / f`
 
-Subtract y from x: x - y
+- Convert x to integer (rounding to nearest): 
+  - `(x + f / 2) / f`  if `x >= 0`,
+  - `(x - f / 2) / f`  if `x < 0`.
 
-Add x and n: x + n * f
+- Add x and y: `x + y`
 
-Subtract n from x: x - n * f
+- Subtract y from x: `x - y`
 
-Multiply x by y: ((int64_t) x) * y / f
+- Add x and n: `x + n * f`
 
-Multiply x by n: x * n
+- Subtract n from x: `x - n * f`
 
-Divide x by y: ((int64_t) x) * f / y
+- Multiply x by y: `((int64_t) x) * y / f`
 
-Divide x by n: x / n
+- Multiply x by n: `x * n`
 
-```
+- Divide x by y: `((int64_t) x) * f / y`
+
+- Divide x by n: `x / n`
