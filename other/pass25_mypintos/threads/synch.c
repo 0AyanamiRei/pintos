@@ -121,18 +121,28 @@ sema_up (struct semaphore *sema) {
   sema->value++;
 
   if (!list_empty (&sema->waiters)) {
-    /** choose higest priority thread to unblock */
-    struct list_elem *e;
-    struct thread *t, *ret_t = NULL;
-    for (e = list_begin(&sema->waiters); e != list_end (&sema->waiters); e = list_next (e)) {
-      t = list_entry(e, struct thread, elem);
-      if(ret_t == NULL || ret_t->priority < t->priority){
-        ret_t = t;
+    if(!thread_mlfqs) {
+      /** choose higest priority thread to unblock */
+      struct list_elem *e;
+      struct thread *t, *ret_t = NULL;
+      for (e = list_begin(&sema->waiters); e != list_end (&sema->waiters); e = list_next (e)) {
+        t = list_entry(e, struct thread, elem);
+        if(ret_t == NULL || ret_t->priority < t->priority){
+          ret_t = t;
+        }
       }
+      list_remove(&ret_t->elem);
+      thread_unblock(ret_t);
+    } else {
+      struct list_elem *max_priority = list_max (&sema->waiters,thread_compare_priority,NULL);
+      list_remove (max_priority);
+      thread_unblock(list_entry (max_priority,struct thread,elem));
+      intr_set_level (old_level);
+      thread_yield();
     }
-    list_remove(&ret_t->elem);
-    thread_unblock(ret_t);
   }
+  
+  
   intr_set_level (old_level);
 }
 
@@ -487,6 +497,13 @@ cond_wait (struct condition *cond,
   lock_acquire (lock);
 }
 
+bool cond_compare_priority (const struct list_elem *a,const struct list_elem *b,void *aux UNUSED){
+  struct semaphore_elem *sa = list_entry(a,struct semaphore_elem,elem);
+  struct semaphore_elem *sb = list_entry(b,struct semaphore_elem,elem);
+  return list_entry(list_front(&sa->semaphore.waiters),struct thread,elem)->priority < 
+         list_entry(list_front(&sb->semaphore.waiters),struct thread,elem)->priority;
+}
+
 struct thread*
 max_in_sema(struct semaphore *sema) {
   ASSERT (sema != NULL);
@@ -522,35 +539,40 @@ cond_signal (struct condition *cond,
   ASSERT (lock != NULL);
   ASSERT (!intr_context ());
   ASSERT (lock_held_by_current_thread (lock));
-
-
   if (!list_empty (&cond->waiters)) {
-    enum intr_level old_level;
-    old_level = intr_disable ();
+    if(!thread_mlfqs) {
+      enum intr_level old_level;
+      old_level = intr_disable ();
 
-    struct thread *t = NULL;
-    struct list_elem *e, *e_ret;
-    struct semaphore *sema, *ret_sema;
+      struct thread *t = NULL;
+      struct list_elem *e, *e_ret;
+      struct semaphore *sema, *ret_sema;
 
-    // sema_up (&list_entry(list_pop_front(&cond->waiters), struct semaphore_elem, elem)->semaphore);
+      // sema_up (&list_entry(list_pop_front(&cond->waiters), struct semaphore_elem, elem)->semaphore);
 
-    // /** 扫描所有信号量 */
-    for (e = list_begin(&cond->waiters); e != list_end(&cond->waiters); e = list_next(e)){
-      sema = &list_entry(e, struct semaphore_elem, elem)->semaphore;
-      struct thread* temp = max_in_sema(sema);
-      if(t == NULL || temp->priority > t->priority) {
-        e_ret = e;
-        t = temp;
-        ret_sema = sema;
+      // /** 扫描所有信号量 */
+      for (e = list_begin(&cond->waiters); e != list_end(&cond->waiters); e = list_next(e)){
+        sema = &list_entry(e, struct semaphore_elem, elem)->semaphore;
+        struct thread* temp = max_in_sema(sema);
+        if(t == NULL || temp->priority > t->priority) {
+          e_ret = e;
+          t = temp;
+          ret_sema = sema;
+        }
       }
+
+      ret_sema->value++;
+      list_remove(&t->elem);
+      list_remove(e_ret);
+      thread_unblock(t);
+
+      intr_set_level (old_level);
+    } else {
+      struct list_elem *max_priority = list_max (&cond->waiters,cond_compare_priority,NULL);
+      list_remove (max_priority);
+      sema_up(&list_entry(max_priority,struct semaphore_elem,elem)->semaphore);
     }
-
-    ret_sema->value++;
-    list_remove(&t->elem);
-    list_remove(e_ret);
-    thread_unblock(t);
-
-    intr_set_level (old_level);
+  
   }
 }
 

@@ -135,7 +135,7 @@ int thread_get_load_avg (void);
 void wake_up_(void);
 
 bool thread_cmp_priority (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
-
+bool thread_compare_priority (const struct list_elem *a,const struct list_elem *b,void *aux UNUSED);
 /** BSD */
 void increase_recent_cpu(struct thread *t);
 void update_load_avg(void);
