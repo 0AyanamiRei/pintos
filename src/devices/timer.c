@@ -108,12 +108,6 @@ timer_sleep (int64_t ticks)
   thread_block();
 
   intr_set_level (old_level);
-
-  // int64_t start = timer_ticks ();
-  // ASSERT (intr_get_level () == INTR_ON);
-  // while (timer_elapsed (start) < ticks) {
-  //   thread_yield ();
-  // }
 }
 
 /** Sleeps for approximately MS milliseconds.  Interrupts must be
@@ -209,6 +203,23 @@ static void
 timer_interrupt (struct intr_frame *args UNUSED) {
   ticks++;
   thread_tick ();
+
+  if(thread_mlfqs) {
+    struct thread *t = thread_current();
+    /** 每1个tick自增`recent_cpu` */
+    increase_recent_cpu(t);
+    if(timer_ticks()%TIMER_FREQ == 0){
+      /** 每秒更新load_avg */
+      update_load_avg();
+      /** 每秒为所有线程重新计算一遍`recent_cpu` */
+      thread_foreach(update_recent_cpu, NULL);
+    }
+
+    if(timer_ticks()%4 == 0) {
+      /** 每4个ticks重新计算一遍`priority` */
+      thread_foreach(update_priority, NULL);
+    }
+  }
 
   thread_foreach(sleep_wake_up_, NULL);
 }

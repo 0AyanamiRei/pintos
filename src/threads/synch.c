@@ -275,7 +275,7 @@ lock_acquire (struct lock *lock) {
   ASSERT (!intr_context ());
   ASSERT (!lock_held_by_current_thread (lock));
 
-  if(lock->holder != NULL)  {
+  if(!thread_mlfqs && lock->holder != NULL)  {
     donate_priority(lock, thread_current());
   }
 
@@ -334,44 +334,45 @@ lock_release (struct lock *lock) {
   
   struct thread* t = lock->holder;
 
-  /** 无捐赠优先级*/
-  if(!t->donate_nums) {
-    ;
-  } else { /** 处理捐赠记录 */
-    int max_index = 0; /** 捐赠记录最大值下标 */
-    for(int i = 0; i < MAXLOCKS; i ++){
-      if(t->temp_priority[max_index] < t->temp_priority[i]){
-        max_index = i;
-      }
-    }
-
-    if(lock->index != -1) {
-      if(--(t->donate_nums) == 0){ /** 释放最后一个带捐赠的锁 */
-        t->priority = t->first_priority;
-        t->first_priority = -1;
-      } else { /** 不是最后一个带捐赠记录的锁 */
-      /** 如果当前锁记录的捐赠优先级是最高的那么就需要复原
-       *  否则不复原持锁线程优先级, 而是把等待队列中的线程加入ready_list
-      */
-        if(max_index == lock->index) {
-          t->priority = t->temp_priority[lock->index];
-        } else {
-          struct list_elem* e;
-          struct thread* t;
-          struct list* l = &lock->semaphore.waiters;
-          for(e = list_head(l); e != list_head(l); e = e->next) {
-            t = list_entry(e, struct thread, elem);
-            thread_unblock(t);
-            list_remove(e);
-          }
+  if(!thread_mlfqs) {
+    /** 无捐赠优先级*/
+    if(!t->donate_nums) {
+      ;
+    } else { /** 处理捐赠记录 */
+      int max_index = 0; /** 捐赠记录最大值下标 */
+      for(int i = 0; i < MAXLOCKS; i ++){
+        if(t->temp_priority[max_index] < t->temp_priority[i]){
+          max_index = i;
         }
       }
-      /** 不管如何都要清空这把锁的记录 */
-      t->temp_priority[lock->index] = -1;
-      lock->index = -1;
-    }
-  }
 
+      if(lock->index != -1) {
+        if(--(t->donate_nums) == 0){ /** 释放最后一个带捐赠的锁 */
+          t->priority = t->first_priority;
+          t->first_priority = -1;
+        } else { /** 不是最后一个带捐赠记录的锁 */
+        /** 如果当前锁记录的捐赠优先级是最高的那么就需要复原
+         *  否则不复原持锁线程优先级, 而是把等待队列中的线程加入ready_list
+        */
+          if(max_index == lock->index) {
+            t->priority = t->temp_priority[lock->index];
+          } else {
+            struct list_elem* e;
+            struct thread* t;
+            struct list* l = &lock->semaphore.waiters;
+            for(e = list_head(l); e != list_head(l); e = e->next) {
+              t = list_entry(e, struct thread, elem);
+              thread_unblock(t);
+              list_remove(e);
+            }
+          }
+        }
+        /** 不管如何都要清空这把锁的记录 */
+        t->temp_priority[lock->index] = -1;
+        lock->index = -1;
+      }
+    }  
+  }
 
   lock->holder = NULL;
 
@@ -552,27 +553,6 @@ cond_signal (struct condition *cond,
     intr_set_level (old_level);
   }
 }
-
-/*  enum intr_level old_level;
-  ASSERT (sema != NULL);
-  old_level = intr_disable ();
-  sema->value++;
-
-  if (!list_empty (&sema->waiters)) {
-    struct list_elem *e;
-    struct thread *t, *ret_t = NULL;
-    for (e = list_begin(&sema->waiters); e != list_end (&sema->waiters); e = list_next (e)) {
-      t = list_entry(e, struct thread, elem);
-      if(ret_t == NULL || ret_t->priority < t->priority){
-        ret_t = t;
-      }
-    }
-    list_remove(&ret_t->elem);
-    thread_unblock(ret_t);
-  }
-  intr_set_level (old_level);
-
-*/
 
 /**
  * @brief The "broadcast" version of `cond_signal`.

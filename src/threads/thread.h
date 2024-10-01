@@ -5,6 +5,7 @@
 #include <list.h>
 #include <stdint.h>
 
+
 /** States in a thread's life cycle. */
 enum thread_status
   {
@@ -74,6 +75,9 @@ struct thread {
   /* Owned by userprog/process.c. */
   uint32_t *pagedir;                  /**< Page directory. */
   #endif
+
+  int nice;
+  int64_t recent_cpu;
   
   struct lock* block_lock;
   int donate_nums;
@@ -93,6 +97,8 @@ struct thread {
    If true, use multi-level feedback queue scheduler.
    Controlled by kernel command-line option "-o mlfqs". */
 extern bool thread_mlfqs;
+extern int64_t load_avg;
+extern int ready_threads;
 
 void thread_init (void);
 void thread_start (void);
@@ -127,5 +133,14 @@ int thread_get_load_avg (void);
 
 /** Alarm Clock */
 void wake_up_(void);
+
+bool thread_cmp_priority (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
+
+/** BSD */
+void increase_recent_cpu(struct thread *t);
+void update_load_avg(void);
+void update_recent_cpu(struct thread *t,void *aux UNUSED);
+void update_priority(struct thread *t,void *aux UNUSED);
+
 
 #endif /**< threads/thread.h */

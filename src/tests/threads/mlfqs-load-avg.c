@@ -108,6 +108,26 @@
    After 178 seconds, load average=8.98.
 */
 
+
+/*
+这段代码是一个多级反馈队列调度器（MLFQS）的负载平均数测试。
+
+首先，定义了一个全局变量start_time，用于记录测试开始的时间
+然后定义了一个宏THREAD_CNT，表示要创建的线程数量。
+
+test_mlfqs_load_avg函数是主测试函数。首先，它断言当前线程调度器是MLFQS。
+然后，记录测试开始的时间，并创建`THREAD_CNT`个线程。每个线程的名字是"load i"，
+其中i是线程的序号。线程的优先级被设置为默认值，线程的函数是load_thread，参数是线程的序号。
+
+然后，主线程将自己的优先级设置为-20，这是最高的优先级。接着，主线程开始一个循环，
+每隔2秒，就打印一次当前的负载平均数。
+
+load_thread函数是每个创建的线程要执行的函数。每个线程首先睡眠一段时间，
+然后进入一个忙等待的循环，直到达到预定的时间，然后再睡眠一段时间，最后退出。这样，
+每个线程在一段时间内是运行状态，在一段时间内是睡眠状态，这样可以模拟出不同的负载情况。
+
+总的来说，这个测试的目的是检查MLFQS的负载平均数计算是否正确。
+*/
 #include <stdio.h>
 #include "tests/threads/tests.h"
 #include "threads/init.h"
@@ -147,8 +167,7 @@ test_mlfqs_load_avg (void)
       int load_avg;
       timer_sleep (sleep_until - timer_ticks ());
       load_avg = thread_get_load_avg ();
-      msg ("After %d seconds, load average=%d.%02d.",
-           i * 2, load_avg / 100, load_avg % 100);
+      msg ("After %d seconds, load average=%d.%02d.", i * 2, load_avg / 100, load_avg % 100);
     }
 }
 
