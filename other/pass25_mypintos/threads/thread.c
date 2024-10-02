@@ -28,6 +28,9 @@ static struct list ready_list;
    when they are first scheduled and removed when they exit. */
 static struct list all_list;
 
+/** 记录睡眠中的线程 */
+static struct list sleep_list;
+
 /** Idle thread. */
 static struct thread *idle_thread;
 
@@ -92,6 +95,7 @@ thread_init (void) {
   lock_init (&tid_lock);
   list_init (&ready_list);
   list_init (&all_list);
+  list_init (&sleep_list);
 
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread (); // 0xc000e000
@@ -140,6 +144,20 @@ thread_tick (void)
   if (++thread_ticks >= TIME_SLICE) {
     intr_yield_on_return ();
   }
+
+  /** 睡眠时长自减, 尝试唤醒 */
+  struct thread *t;
+  for(struct list_elem *e = list_begin(&sleep_list); e != list_end(&sleep_list); e = list_next(e)) {
+	  t = list_entry (e, struct thread, sleepelem);
+    ASSERT(is_thread(t) == true);
+    ASSERT(t->status == THREAD_BLOCKED);
+    ASSERT(t->sleep_time > 0);
+
+    if(--(t->sleep_time) <= 0) {
+      list_remove(e);
+      thread_unblock(t);
+    }
+  }
 }
 
 /** Prints thread statistics. */
@@ -170,7 +188,8 @@ tid_t
 thread_create (const char  *name,
                int         priority,
                thread_func *function,
-               void        *aux) {
+               void        *aux)
+{
   struct thread *t;
   struct kernel_thread_frame *kf;
   struct switch_entry_frame *ef;
@@ -207,9 +226,8 @@ thread_create (const char  *name,
   /* Add to run queue. */
   thread_unblock (t);
 
-  if(thread_mlfqs && thread_current ()->priority < priority) {
-    thread_yield();
-  }
+  // try_yield (t);
+
   return tid;
 }
 
@@ -246,24 +264,26 @@ thread_block (void) {
 void
 thread_unblock (struct thread *t) {
   enum intr_level old_level;
-  bool old_context = intr_context();
 
   ASSERT (is_thread (t));
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  list_insert_ordered (&ready_list, &t->elem, (list_less_func *) &thread_cmp_priority, NULL);  
+
+  list_insert_ordered (&ready_list, &t->elem,
+                      (list_less_func*)&thread_cmp_priority,
+                       NULL);  
+
   t->status = THREAD_READY;
-  if(!thread_mlfqs) {
-    if(t->priority > thread_current()->priority) {
-    if(old_context) {
+
+  if(t->priority > thread_current()->priority) {
+    if(intr_context()) {
       intr_yield_on_return();
     } else {
       if (thread_current()->tid != 2){
         thread_yield();
       }
     }
-  }
   }
   intr_set_level (old_level);
 }
@@ -338,7 +358,9 @@ thread_yield (void) {
   old_level = intr_disable ();
   
   if (cur != idle_thread) {
-    list_insert_ordered (&ready_list, &cur->elem, (list_less_func *) &thread_cmp_priority, NULL);
+    list_insert_ordered (&ready_list, &cur->elem,
+                        (list_less_func*)&thread_cmp_priority,
+                        NULL); 
   }
 
   cur->status = THREAD_READY;
@@ -377,15 +399,10 @@ thread_set_priority (int new_priority)
       }
     } else {
       thread_current ()->priority = new_priority;
-      /** 直到确认自己为最高优先级 */
-      for(;;){
-        struct list_elem* e = list_begin (&ready_list);
-        struct thread *t = list_entry (e, struct thread, elem);
-        if(new_priority < t->priority) {
-          thread_yield();
-        } else {
-          break;
-        }
+      if(!list_empty(&ready_list) &&
+         list_entry(list_back(&ready_list), struct thread, elem)
+         ->priority > new_priority ) {
+        thread_yield();
       }
     }
   }
@@ -528,13 +545,10 @@ init_thread (struct thread *t, const char *name, int priority)
   strlcpy (t->name, name, sizeof t->name);
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
+  t->sleep_time = 0;
   t->magic = THREAD_MAGIC;
 
   old_level = intr_disable ();
-
-  /* initilize param used to sleep */
-  t->sleep_intervals_ = -1;
-  t->sleep_time_ = -1;
 
   /** initilize param used to priority-donate */
   if(!thread_mlfqs) {
@@ -590,13 +604,7 @@ next_thread_to_run (void) {
   if (list_empty (&ready_list)){
     return idle_thread;
   } else {
-    if(!thread_mlfqs) {
-      return list_entry (list_pop_front (&ready_list), struct thread, elem);
-    } else {
-      struct list_elem *max_priority = list_max (&ready_list,thread_compare_priority,NULL);
-      list_remove (max_priority);
-      return list_entry (max_priority,struct thread,elem);
-    }
+    return list_entry (list_pop_back (&ready_list), struct thread, elem);
   }
 }
 
@@ -719,56 +727,31 @@ allocate_tid (void)
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
 
 bool
-thread_cmp_priority (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED)
+thread_cmp_priority (const struct list_elem *a,
+                     const struct list_elem *b,
+                     void *aux UNUSED)
 {
-  return list_entry(a, struct thread, elem)->priority > list_entry(b, struct thread, elem)->priority;
+  return list_entry(a, struct thread, elem)->priority <= 
+         list_entry(b, struct thread, elem)->priority;
 }
 
-bool
-thread_compare_priority (const struct list_elem *a,const struct list_elem *b,void *aux UNUSED){
-  return list_entry(a,struct thread,elem)->priority < list_entry(b,struct thread,elem)->priority;
-}
-
-void wake_up_(void) {
-  struct list_elem *e;
-  struct thread *t;
-  struct thread *t_numpy[128];
-  int k = -1;
-
-  ASSERT (intr_get_level () == INTR_OFF);
-
-  /** find the sleep thread with higest priority */
-  for (e = list_begin(&all_list); e != list_end (&all_list); e = list_next (e)) {
-    t = list_entry (e, struct thread, allelem);
-    if(t->status != THREAD_BLOCKED || t->sleep_intervals_ == -1 || t->sleep_time_ == -1) {
-      continue;
-    }
-
-    t->sleep_time_ ++;
-
-    if(t->sleep_time_ >= t->sleep_intervals_) {
-      if(k == -1 || t_numpy[k]->priority < t->priority){
-        k = 0;
-        t_numpy[k] = t;
-      } else if(t_numpy[k]->priority == t->priority) {
-        t_numpy[++k] = t;
-      }
-    }
+void try_yield(struct thread *t) {
+  enum intr_level old_level = intr_disable ();
+  if(t->priority > thread_current()->priority) {
+    thread_yield();
   }
-  
-  /** wake up it */
-  if(k != -1){
-    for(int i = 0; i <= k; ++i) {
-      t = t_numpy[i];
-      t->sleep_intervals_ = -1;
-      t->sleep_time_ = -1;
-
-      thread_unblock(t);
-    }
-  }
-
+  intr_set_level (old_level);
 }
 
+void
+thread_sleep(int64_t sleep_time) {
+  // ASSERT (!intr_context ());
+  // ASSERT (intr_get_level () == INTR_OFF);
+  struct thread *cur = thread_current();
+  cur->sleep_time = sleep_time;
+  list_push_back(&sleep_list, &cur->sleepelem);
+  thread_block();
+}
 
 void
 increase_recent_cpu(struct thread *t) {

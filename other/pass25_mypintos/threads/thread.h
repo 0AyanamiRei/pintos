@@ -85,8 +85,8 @@ struct thread {
   int temp_priority[MAXLOCKS];
   int k;
   
-  int64_t sleep_time_;
-  int64_t sleep_intervals_;
+  struct list_elem sleepelem;       /**< 追踪睡眠队列 */
+  int64_t sleep_time;               /**< 用于记录睡眠所需时长 */
 
   /* Owned by thread.c. */
   unsigned magic;                     /**< Detects stack overflow.
@@ -132,10 +132,11 @@ int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
 /** Alarm Clock */
-void wake_up_(void);
+void thread_sleep (int64_t sleep_time);
 
 bool thread_cmp_priority (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
-bool thread_compare_priority (const struct list_elem *a,const struct list_elem *b,void *aux UNUSED);
+void try_yield(struct thread *t);
+
 /** BSD */
 void increase_recent_cpu(struct thread *t);
 void update_load_avg(void);
