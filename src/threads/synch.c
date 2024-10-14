@@ -135,8 +135,6 @@ sema_up (struct semaphore *sema)
   sema->value++;
   intr_set_level (old_level);
   
-  /* New threads are put in to the READY LIST, and the maximum priority of
-     ready threads may changes.*/
   try_yield ();
 }
 
@@ -274,8 +272,8 @@ lock_acquire (struct lock *lock)
   if (!thread_mlfqs)
     {
 	  lock_update_priority (lock);
-      thread_update_priority (thread_current ());
-      thread_yield ();
+    thread_update_priority (thread_current ());
+    thread_yield ();
 	}
 }
 

@@ -46,6 +46,10 @@ void
 palloc_init (size_t user_page_limit)
 {
   /* Free memory starts at 1 MB and runs to the end of RAM. */
+  // 物理地址0x00100000(1MB)到RAM结束是可分配的空闲内存
+  // 注意: 前面有提到内核基地址= LOADER_PHYS_BASE + LOADER_KERN_BASE
+  // 0xc0000000 + 0x20000
+  // 这里将free_start和free_end初始化为虚拟地址
   uint8_t *free_start = ptov (1024 * 1024);
   uint8_t *free_end = ptov (init_ram_pages * PGSIZE);
   size_t free_pages = (free_end - free_start) / PGSIZE;
@@ -67,6 +71,13 @@ palloc_init (size_t user_page_limit)
    then the pages are filled with zeros.  If too few pages are
    available, returns a null pointer, unless PAL_ASSERT is set in
    FLAGS, in which case the kernel panics. */
+/**
+ * 以`flags`标记获取`page_cnt`个连续page
+ * 
+ * - `PAL_ASSERT`: If the pages cannot be allocated, panic the kernel
+ * - `PAL_ZERO`: Zero all the bytes in the allocated pages before returning them.
+ * - `PAL_USER`: Obtain the pages from the user pool
+*/
 void *
 palloc_get_multiple (enum palloc_flags flags, size_t page_cnt)
 {
@@ -156,6 +167,8 @@ init_pool (struct pool *p, void *base, size_t page_cnt, const char *name)
   /* We'll put the pool's used_map at its base.
      Calculate the space needed for the bitmap
      and subtract it from the pool's size. */
+  // used_map是自包含的元信息, 需要使用pool中一部分内存
+  // 可以看到也是以PGSIZE为最小单元, 所以最少也要使用1 page
   size_t bm_pages = DIV_ROUND_UP (bitmap_buf_size (page_cnt), PGSIZE);
   if (bm_pages > page_cnt)
     PANIC ("Not enough memory in %s for bitmap.", name);
