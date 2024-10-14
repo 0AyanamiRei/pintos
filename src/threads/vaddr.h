@@ -66,6 +66,11 @@ is_kernel_vaddr (const void *vaddr)
   return vaddr >= PHYS_BASE;
 }
 
+
+// 内核的虚拟地址和物理地址之间差了PHYS_BASE, 也就是说
+// 内核的虚拟地址va = pa+PHYS_BASE 
+
+
 /** Returns kernel virtual address at which physical address PADDR
    is mapped. */
 static inline void * 
