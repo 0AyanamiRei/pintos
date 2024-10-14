@@ -98,9 +98,9 @@ pintos_init (void)
           init_ram_pages * PGSIZE / 1024);
 
   /* Initialize memory system. */
-  palloc_init (user_page_limit);
-  malloc_init ();
-  paging_init ();
+  palloc_init (user_page_limit);   /**< 初始化kernel_pool和user_pool */
+  malloc_init ();                  /**< todo */
+  paging_init ();                  /**< */
 
   /* Segmentation. */
 #ifdef USERPROG
@@ -168,7 +168,7 @@ paging_init (void)
   size_t page;
   extern char _start, _end_kernel_text;
 
-  pd = init_page_dir = palloc_get_page (PAL_ASSERT | PAL_ZERO); // page dir
+  pd = init_page_dir = palloc_get_page (PAL_ASSERT | PAL_ZERO); // page dir (从kernel pool中分配page
   pt = NULL;                                                    // page table
   for (page = 0; page < init_ram_pages; page++) {
       uintptr_t paddr = page * PGSIZE;
