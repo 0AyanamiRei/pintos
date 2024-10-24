@@ -13,8 +13,10 @@ syscall_init (void)
 }
 
 static void
-syscall_handler (struct intr_frame *f UNUSED) 
+syscall_handler (struct intr_frame *f UNUSED)
 {
+  uint32_t syscall_num1 = *(uint32_t *)(f->esp);
+  uint32_t syscall_num2 = *(uint32_t *)(f->esp - sizeof(uint32_t));
   printf ("system call!\n");
   thread_exit ();
 }

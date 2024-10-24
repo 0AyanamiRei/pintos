@@ -49,7 +49,11 @@ static inline void *pg_round_down (const void *va) {
    This address also marks the end of user programs' address
    space.  Up to this point in memory, user programs are allowed
    to map whatever they like.  At this point and above, the
-   virtual address space belongs to the kernel. */
+   virtual address space belongs to the kernel. 
+// PA = VA + PHYS_BASE
+// PHYS_BASE以下是用户进程的地址空间
+// PHYS_BASE以上1:1的是内核地址空间
+*/
 #define	PHYS_BASE ((void *) LOADER_PHYS_BASE)
 
 /** Returns true if VADDR is a user virtual address. */
@@ -72,7 +76,10 @@ is_kernel_vaddr (const void *vaddr)
 
 
 /** Returns kernel virtual address at which physical address PADDR
-   is mapped. */
+   is mapped.
+// P2V: pa -> va
+// 返回物理地址+`PHYS_BASE`
+*/
 static inline void * 
 ptov (uintptr_t paddr)
 {

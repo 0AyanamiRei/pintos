@@ -20,6 +20,9 @@
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
+static int parser(char *str, char **argv);
+static void pass_argv(void **esp, char **argv, int argc);
+
 
 /** Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
@@ -34,19 +37,19 @@ process_execute (const char *file_name)
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
   fn_copy = palloc_get_page (0);
-  if (fn_copy == NULL)
-    return TID_ERROR;
+  if (fn_copy == NULL) { return TID_ERROR; }
   strlcpy (fn_copy, file_name, PGSIZE);
 
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
-  if (tid == TID_ERROR)
-    palloc_free_page (fn_copy); 
+  if (tid == TID_ERROR) { palloc_free_page (fn_copy); } 
   return tid;
 }
 
 /** A thread function that loads a user process and starts it
-   running. */
+   running.
+// 在process_execute中创造的线程被调度后会执行到这里
+*/
 static void
 start_process (void *file_name_)
 {
@@ -59,8 +62,11 @@ start_process (void *file_name_)
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
-  success = load (file_name, &if_.eip, &if_.esp);
-
+  char **argv = (char**)(file_name_ + PGSIZE / 2 ); /**< 复用`process_execute()`中分配的`fn_copy`*/
+  int argc = parser(file_name, argv);
+  success = load (argv[0], &if_.eip, &if_.esp); /**< 需要解析参数, 传入正确的文件名 */
+  pass_argv(&if_.esp, argv, argc); /**< 将参数压入用户栈 */
+  hex_dump((uintptr_t)if_.esp, if_.esp, PHYS_BASE-if_.esp, true); /**< for Debug*/
   /* If load failed, quit. */
   palloc_free_page (file_name);
   if (!success) 
@@ -131,7 +137,7 @@ process_activate (void)
      interrupts. */
   tss_update ();
 }
-
+
 /** We load ELF binaries.  The following definitions are taken
    from the ELF specification, [ELF1], more-or-less verbatim.  */
 
@@ -201,6 +207,69 @@ static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
                           uint32_t read_bytes, uint32_t zero_bytes,
                           bool writable);
 
+/** 解析参数, 比如 str="/bin/ls -l foo bar"那么按要求处理:
+ * argv[0]="/bin/ls"
+ * argv[1]="-l"
+ * argv[2]="foo"
+ * argv[3]="bar"
+ * argv[4]=null
+ * 返回argc=4
+*/
+static int parser(char *str, char **argv) {
+  char *save_ptr;
+  char *token = strtok_r(str, " ", &save_ptr);
+  int argc = 0;
+
+  while (token != NULL) {
+    argv[argc++] = token;
+    token = strtok_r(NULL, " ", &save_ptr);
+  }
+  argv[argc]=NULL;
+  return argc;
+}
+/** 将参数压入用户栈 此时esp->PHYS_BASE, 可以放心的使用, 因为在load中我们刷新
+ *  了页目录, 能够正确的翻译到线程自己的栈
+ * argv={"/bin/ls", "-l", "foo", "bar", "null"}
+ * argc=4
+*/
+static void pass_argv(void **esp, char **argv, int argc) {
+  uint32_t argv_addr[argc + 1];
+  uint32_t sp = PHYS_BASE;
+
+  // 将argv解析的参数压入栈中
+  for (int i = argc - 1; i >= 0; i--) {
+    sp -= strlen(argv[i]) + 1;
+    strlcpy((void *)sp, argv[i], strlen(argv[i]) + 1);
+    argv_addr[i] = sp;
+  }
+  argv_addr[argc] = 0;
+  sp -= sp % 4;
+
+  // 将argv各个参数字符串的地址压入栈中
+  for (int i = argc; i >= 0; i--) {
+    sp -= sizeof(uint32_t);
+    memcpy((void *)sp, &argv_addr[i], sizeof(uint32_t));
+  }
+
+  //将argv指针压入栈中
+  uint32_t argv_ptr = sp;
+  sp -= sizeof(uint32_t);
+  memcpy((void *)sp, &argv_ptr, sizeof(uint32_t));
+
+  //将argc压入栈中
+  sp -= sizeof(uint32_t);
+  memcpy((void *)sp, &argc, sizeof(uint32_t));
+
+  //fake return address
+  uint32_t fake_return_addr = 0;
+  sp -= sizeof(uint32_t);
+  memcpy((void *)sp, &fake_return_addr, sizeof(uint32_t));
+
+  // 更新 esp
+  *esp = sp;
+}
+
+
 /** Loads an ELF executable from FILE_NAME into the current thread.
    Stores the executable's entry point into *EIP
    and its initial stack pointer into *ESP.
@@ -217,17 +286,15 @@ load (const char *file_name, void (**eip) (void), void **esp)
 
   /* Allocate and activate page directory. */
   t->pagedir = pagedir_create ();
-  if (t->pagedir == NULL) 
-    goto done;
+  if (t->pagedir == NULL) { goto done; }
   process_activate ();
 
   /* Open executable file. */
   file = filesys_open (file_name);
-  if (file == NULL) 
-    {
+  if (file == NULL) {
       printf ("load: %s: open failed\n", file_name);
       goto done; 
-    }
+  }
 
   /* Read and verify executable header. */
   if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
@@ -315,7 +382,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
   file_close (file);
   return success;
 }
-
+
 /** load() helpers. */
 
 static bool install_page (void *upage, void *kpage, bool writable);

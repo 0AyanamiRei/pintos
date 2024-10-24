@@ -37,13 +37,25 @@ start:
 #### works for memory sizes <= 65 MB, which should be fine for our
 #### purposes.  We cap memory at 64 MB because that's all we prepare
 #### page tables for, below.
+#### 
+#### 获取系统的内存大小
+#### 调用中断15h的函数88h来获取系统的内存大小
+#### (实际上返回AX寄存器的值, 等于 PM-1024 KB)
+#### 这个函数只适用于内存大小小于或等于65MB的情况
+#### The simplest BIOS function to do this can only
+#### detect up to 64 MB of RAM.
+#### 
+#### 最后得到4kb page的总数量(%eax右移2位)
+#### 然后把该值存放到全局变量`init_ram_pages`中
+#### UNDO: 解释一下init_ram_pages - LOADER_PHYS_BASE - 0x20000
+####       gdb中能够打印得到&init_ram_pages = 0xc002015e
 
 	movb $0x88, %ah
 	int $0x15
 	addl $1024, %eax	# Total kB memory
-	cmp $0x10000, %eax	# Cap at 64 MB
+	cmp $0x10000, %eax	# 与64MB(0x10000)进行比较
 	jbe 1f
-	mov $0x10000, %eax
+	mov $0x10000, %eax # 总内存大小至多64MB
 1:	shrl $2, %eax		# Total 4 kB pages
 	addr32 movl %eax, init_ram_pages - LOADER_PHYS_BASE - 0x20000
 

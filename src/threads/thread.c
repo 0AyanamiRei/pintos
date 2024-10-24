@@ -710,15 +710,20 @@ thread_cmp_priority (const struct list_elem *a,
          list_entry(b, struct thread, elem)->priority;
 }
 
-void try_yield() {
+void try_yield(void) {
   enum intr_level old_level = intr_disable ();
   bool result = !list_empty (&ready_list) &&
                 list_entry (list_back (&ready_list), struct thread, elem)->priority >
 	            thread_get_priority ();
   intr_set_level (old_level);
   
-  if (result)
-	thread_yield (); 
+  if (result) {
+    if(intr_context()) {
+      intr_yield_on_return();
+    } else {
+	    thread_yield (); 
+    }
+  }
 }
 
 void

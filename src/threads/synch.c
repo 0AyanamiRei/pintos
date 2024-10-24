@@ -273,7 +273,7 @@ lock_acquire (struct lock *lock)
     {
 	  lock_update_priority (lock);
     thread_update_priority (thread_current ());
-    thread_yield ();
+    try_yield ();
 	}
 }
 

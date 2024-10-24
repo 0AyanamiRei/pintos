@@ -132,7 +132,7 @@ int thread_get_load_avg (void);
 void thread_sleep (int64_t sleep_time);
 
 bool thread_cmp_priority (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
-void try_yield();
+void try_yield(void);
 void thread_update_priority (struct thread *);
 
 void thread_ready_rearrange (struct thread *);

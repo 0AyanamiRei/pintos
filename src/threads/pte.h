@@ -33,12 +33,16 @@ static inline unsigned pt_no (const void *va) {
   return ((uintptr_t) va & PTMASK) >> PTSHIFT;
 }
 
-/** Obtains page directory index from a virtual address. */
+/** Obtains page directory index from a virtual address. 
+// 右移22位虚拟地址得到`Page Directory Index`
+*/
 static inline uintptr_t pd_no (const void *va) {
   return (uintptr_t) va >> PDSHIFT;
 }
 
 /** Page directory and page table entries.
+// Page directory实际上指的就是多级页表的内层页表, 而Page table
+// 则是最后一层映射, 查询得到包含data/code的page地址
 
    For more information see the section on page tables in the
    Pintos reference guide chapter, or [IA32-v3a] 3.7.6
@@ -73,8 +77,11 @@ static inline uint32_t pde_create (uint32_t *pt) {
   return vtop (pt) | PTE_U | PTE_P | PTE_W;
 }
 
-/** Returns a pointer to the page table that page directory entry
-   PDE, which must "present", points to. */
+/** 
+ * @param [in] pde 页目录PD的条目
+ * 
+ * @return 页目录实际即二级页表, 得到下一级页表的虚拟地址
+*/
 static inline uint32_t *pde_get_pt (uint32_t pde) {
   ASSERT (pde & PTE_P);
   return ptov (pde & PTE_ADDR);
@@ -97,8 +104,8 @@ static inline uint32_t pte_create_user (void *page, bool writable) {
   return pte_create_kernel (page, writable) | PTE_U;
 }
 
-/** Returns a pointer to the page that page table entry PTE points
-   to. */
+/// @param pte 页表条目
+/// @return  该pte指向的page地址(虚拟地址)
 static inline void *pte_get_page (uint32_t pte) {
   return ptov (pte & PTE_ADDR);
 }

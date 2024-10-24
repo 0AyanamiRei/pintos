@@ -12,7 +12,12 @@ static void invalidate_pagedir (uint32_t *);
 /** Creates a new page directory that has mappings for kernel
    virtual addresses, but none for user virtual addresses.
    Returns the new page directory, or a null pointer if memory
-   allocation fails. */
+   allocation fails. 
+// `init_page_dir`在`paging_init()`中第一次出现
+// 在那里修改过, 其PTEs具有内核虚拟地址的映射, 现
+// 在将其复制给pd, 得到一个不包含用户虚拟地址映射
+// 的页表
+*/
 uint32_t *
 pagedir_create (void) 
 {
@@ -33,18 +38,22 @@ pagedir_destroy (uint32_t *pd)
     return;
 
   ASSERT (pd != init_page_dir);
-  for (pde = pd; pde < pd + pd_no (PHYS_BASE); pde++)
-    if (*pde & PTE_P) 
-      {
-        uint32_t *pt = pde_get_pt (*pde);
+  // pd_no (PHYS_BASE) = 0xc0000000>>22 = 0x300 = 768
+  // 通过`pagedir_destroy(pd)`只能释放前768个pde管理的page
+  // 详情缘由查看paging_init()中记录的映射
+  for (pde = pd; pde < pd + pd_no (PHYS_BASE); pde++) { /**< 遍历页目录 */
+    if (*pde & PTE_P)  {
+        uint32_t *pt = pde_get_pt (*pde); // 得到pde指向的page table起始地址(虚拟地址)
         uint32_t *pte;
-        
-        for (pte = pt; pte < pt + PGSIZE / sizeof *pte; pte++)
-          if (*pte & PTE_P) 
-            palloc_free_page (pte_get_page (*pte));
-        palloc_free_page (pt);
+        for (pte = pt; pte < pt + PGSIZE / sizeof *pte; pte++) { /**< 遍历页表 */
+          if (*pte & PTE_P) {
+            palloc_free_page (pte_get_page (*pte)); /**< 释放page */
+          }
+        }
+        palloc_free_page (pt); /**< 释放该页表 */
       }
-  palloc_free_page (pd);
+  }
+  palloc_free_page (pd); /**< 释放该页目录 */
 }
 
 /** Returns the address of the page table entry for virtual
@@ -66,18 +75,12 @@ lookup_page (uint32_t *pd, const void *vaddr, bool create)
   /* Check for a page table for VADDR.
      If one is missing, create one if requested. */
   pde = pd + pd_no (vaddr);
-  if (*pde == 0) 
-    {
-      if (create)
-        {
+  if (*pde == 0) {
+      if (create) {
           pt = palloc_get_page (PAL_ZERO);
-          if (pt == NULL) 
-            return NULL; 
-      
+          if (pt == NULL) { return NULL; }
           *pde = pde_create (pt);
-        }
-      else
-        return NULL;
+        } else { return NULL; }
     }
 
   /* Return the page table entry. */
@@ -88,13 +91,17 @@ lookup_page (uint32_t *pd, const void *vaddr, bool create)
 /** Adds a mapping in page directory PD from user virtual page
    UPAGE to the physical frame identified by kernel virtual
    address KPAGE.
-   UPAGE must not already be mapped.
-   KPAGE should probably be a page obtained from the user pool
-   with palloc_get_page().
-   If WRITABLE is true, the new page is read/write;
-   otherwise it is read-only.
-   Returns true if successful, false if memory allocation
-   failed. */
+   @warning - `upage` must not already be mapped.
+   @warning - `kpage` should probably be a page obtained from the user pool
+              with `palloc_get_page(PAL_USER)`.
+   @warning - If WRITABLE is true, the new page is read/write;
+              otherwise it is read-only.
+   @warning - Returns true if successful, false if memory allocation
+              failed. 
+// 往页目录`pd`中添加一个mapping: `upage->[kpage]`, 用户虚拟页upage
+// 到内核虚拟页kpage标识的physical frame(物理page?)
+// 这里不刷新TLB, 直到下一次访问该新添加表项, 才缓存到TLB中
+*/
 bool
 pagedir_set_page (uint32_t *pd, void *upage, void *kpage, bool writable)
 {
@@ -108,14 +115,11 @@ pagedir_set_page (uint32_t *pd, void *upage, void *kpage, bool writable)
 
   pte = lookup_page (pd, upage, true);
 
-  if (pte != NULL) 
-    {
+  if (pte != NULL) {
       ASSERT ((*pte & PTE_P) == 0);
       *pte = pte_create_user (kpage, writable);
       return true;
-    }
-  else
-    return false;
+    } else { return false; }
 }
 
 /** Looks up the physical address that corresponds to user virtual
@@ -130,16 +134,18 @@ pagedir_get_page (uint32_t *pd, const void *uaddr)
   ASSERT (is_user_vaddr (uaddr));
   
   pte = lookup_page (pd, uaddr, false);
-  if (pte != NULL && (*pte & PTE_P) != 0)
+  if (pte != NULL && (*pte & PTE_P) != 0) {
     return pte_get_page (*pte) + pg_ofs (uaddr);
-  else
-    return NULL;
+  } else { return NULL; }
 }
 
 /** Marks user virtual page UPAGE "not present" in page
    directory PD.  Later accesses to the page will fault.  Other
    bits in the page table entry are preserved.
-   UPAGE need not be mapped. */
+   UPAGE need not be mapped.
+// 修改`pd`中指向`upage`的条目pde, 设置`PTE_P`标记为false
+// 调用invalidate_pagedir(pd)检查是否flush TLB
+*/
 void
 pagedir_clear_page (uint32_t *pd, void *upage) 
 {
@@ -168,20 +174,21 @@ pagedir_is_dirty (uint32_t *pd, const void *vpage)
 }
 
 /** Set the dirty bit to DIRTY in the PTE for virtual page VPAGE
-   in PD. */
+   in PD.
+// 需要考虑刷新TLB
+*/
 void
 pagedir_set_dirty (uint32_t *pd, const void *vpage, bool dirty) 
 {
   uint32_t *pte = lookup_page (pd, vpage, false);
   if (pte != NULL) 
     {
-      if (dirty)
+      if (dirty) {
         *pte |= PTE_D;
-      else 
-        {
+      } else {
           *pte &= ~(uint32_t) PTE_D;
           invalidate_pagedir (pd);
-        }
+      }
     }
 }
 
@@ -197,25 +204,27 @@ pagedir_is_accessed (uint32_t *pd, const void *vpage)
 }
 
 /** Sets the accessed bit to ACCESSED in the PTE for virtual page
-   VPAGE in PD. */
+   VPAGE in PD. 
+// 需要考虑刷新TLB
+*/
 void
 pagedir_set_accessed (uint32_t *pd, const void *vpage, bool accessed) 
 {
   uint32_t *pte = lookup_page (pd, vpage, false);
-  if (pte != NULL) 
-    {
-      if (accessed)
+  if (pte != NULL) {
+      if (accessed) {
         *pte |= PTE_A;
-      else 
-        {
+      } else {
           *pte &= ~(uint32_t) PTE_A; 
           invalidate_pagedir (pd);
-        }
+      }
     }
 }
 
 /** Loads page directory PD into the CPU's page directory base
-   register. */
+   register. 
+// 修改 `cr3`(PD Base Register) = `pd`
+*/
 void
 pagedir_activate (uint32_t *pd) 
 {
@@ -230,7 +239,9 @@ pagedir_activate (uint32_t *pd)
   asm volatile ("movl %0, %%cr3" : : "r" (vtop (pd)) : "memory");
 }
 
-/** Returns the currently active page directory. */
+/** Returns the currently active page directory.
+// 返回当前活动的页目录, 也就是寄存器%cr3中的
+*/
 static uint32_t *
 active_pd (void) 
 {

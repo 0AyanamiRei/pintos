@@ -87,7 +87,6 @@ pintos_init (void)
   /* Break command line into arguments and parse options. */
   argv = read_command_line ();
   argv = parse_options (argv);
-
   /* Initialize ourselves as a thread so we can use locks,
      then enable console locking. */
   thread_init ();
@@ -96,10 +95,9 @@ pintos_init (void)
   /* Greet user. */
   printf ("Pintos booting with %'"PRIu32" kB RAM...\n",
           init_ram_pages * PGSIZE / 1024);
-
   /* Initialize memory system. */
   palloc_init (user_page_limit);   /**< 初始化kernel_pool和user_pool */
-  malloc_init ();                  /**< todo */
+  malloc_init ();                  /**< UNDO */
   paging_init ();                  /**< */
 
   /* Segmentation. */
@@ -107,7 +105,6 @@ pintos_init (void)
   tss_init ();
   gdt_init ();
 #endif
-
   /* Initialize interrupt handlers. */
   intr_init ();
   timer_init ();
@@ -135,6 +132,9 @@ pintos_init (void)
   if (*argv != NULL) {
     /* Run actions specified on kernel command line. */
     run_actions (argv);
+    char buf[INTQ_BUFSIZE] = {0};
+    memset(buf, '\0', INTQ_BUFSIZE); // clear
+    gets(buf, INTQ_BUFSIZE); // get input
   } else {
     run_kernel_shell();
   }
@@ -170,11 +170,14 @@ paging_init (void)
 
   pd = init_page_dir = palloc_get_page (PAL_ASSERT | PAL_ZERO); // page dir (从kernel pool中分配page
   pt = NULL;                                                    // page table
-  for (page = 0; page < init_ram_pages; page++) {
+  // 一个pde=一张页表=1024个page
+  // 所以这里实际只更新了pd[768], pt[0~991]
+  // 这部分二级页表存储的映射覆盖从PHYS_BASE开始的init_ram_pages个page
+  for (page = 0; page < init_ram_pages; page++) { // init_ram_pages = 992
       uintptr_t paddr = page * PGSIZE;
       char *vaddr = ptov (paddr);
-      size_t pde_idx = pd_no (vaddr);
-      size_t pte_idx = pt_no (vaddr);
+      size_t pde_idx = pd_no (vaddr);  /**< pde_idx在这里索引的范围从768开始 */
+      size_t pte_idx = pt_no (vaddr);  /**< pte_idx索引的范围不受限制[0~1023] */
       bool in_kernel_text = &_start <= vaddr && vaddr < &_end_kernel_text;
 
       if (pd[pde_idx] == 0) {
@@ -242,11 +245,11 @@ parse_options (char **argv)
       if (!strcmp (name, "-h"))
         usage ();
       else if (!strcmp (name, "-q"))
-        shutdown_configure (SHUTDOWN_POWER_OFF);
+        shutdown_configure (SHUTDOWN_POWER_OFF); /**< 在pintos执行完所有操作后关机 */
       else if (!strcmp (name, "-r"))
         shutdown_configure (SHUTDOWN_REBOOT);
 #ifdef FILESYS
-      else if (!strcmp (name, "-f"))
+      else if (!strcmp (name, "-f")) /**< 使fs格式化 */
         format_filesys = true;
       else if (!strcmp (name, "-filesys"))
         filesys_bdev_name = value;
@@ -305,6 +308,7 @@ gets(char *buf, int max)
 static void
 run_task (char **argv)
 {
+  // argv[0] = "run"
   const char *task = argv[1];
   
   printf ("Executing '%s':\n", task);
@@ -349,16 +353,20 @@ run_actions (char **argv)
       int i;
 
       /* Find action name. */
-      for (a = actions; ; a++)
-        if (a->name == NULL)
+      for (a = actions; ; a++) {
+        if (a->name == NULL) {
           PANIC ("unknown action `%s' (use -h for help)", *argv);
-        else if (!strcmp (*argv, a->name))
+        } else if (!strcmp (*argv, a->name)) {
           break;
+        }
+      }
 
       /* Check for required arguments. */
-      for (i = 1; i < a->argc; i++)
-        if (argv[i] == NULL)
+      for (i = 1; i < a->argc; i++) {
+        if (argv[i] == NULL) {
           PANIC ("action `%s' requires %d argument(s)", *argv, a->argc - 1);
+        }
+      }
 
       /* Invoke action and advance. */
       a->function (argv);
