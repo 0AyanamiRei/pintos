@@ -3,4 +3,7 @@
 
 void syscall_init (void);
 
+
+/** Projects 2 and later. */
+
 #endif /**< userprog/syscall.h */
