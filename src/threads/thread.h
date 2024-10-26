@@ -76,7 +76,8 @@ struct thread {
   uint32_t *pagedir;                  /**< Page directory. */
   #endif
 
-  int nice;
+  
+  int nice;                   /**< 多级反馈队列 */
   int64_t recent_cpu;
   
 	int real_priority;                 
@@ -138,15 +139,8 @@ void thread_update_priority (struct thread *);
 void thread_ready_rearrange (struct thread *);
 
 /** BSD */
-void increase_recent_cpu(struct thread *t);
-void update_load_avg(void);
-void update_recent_cpu(struct thread *t,void *aux UNUSED);
-void update_priority(struct thread *t,void *aux UNUSED);
-
 void thread_update_priority (struct thread *);
-
 void thread_ready_rearrange (struct thread *);
-
 void thread_tick_one_second (void);
 
 

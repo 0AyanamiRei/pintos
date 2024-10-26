@@ -66,7 +66,7 @@ start_process (void *file_name_)
   int argc = parser(file_name, argv);
   success = load (argv[0], &if_.eip, &if_.esp); /**< 需要解析参数, 传入正确的文件名 */
   pass_argv(&if_.esp, argv, argc); /**< 将参数压入用户栈 */
-  hex_dump((uintptr_t)if_.esp, if_.esp, PHYS_BASE-if_.esp, true); /**< for Debug*/
+  // hex_dump((uintptr_t)if_.esp, if_.esp, PHYS_BASE-if_.esp, true); /**< for Debug*/
   /* If load failed, quit. */
   palloc_free_page (file_name);
   if (!success) 
@@ -107,8 +107,7 @@ process_exit (void)
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
   pd = cur->pagedir;
-  if (pd != NULL) 
-    {
+  if (pd != NULL) {
       /* Correct ordering here is crucial.  We must set
          cur->pagedir to NULL before switching page directories,
          so that a timer interrupt can't switch back to the
@@ -119,7 +118,7 @@ process_exit (void)
       cur->pagedir = NULL;
       pagedir_activate (NULL);
       pagedir_destroy (pd);
-    }
+  }
 }
 
 /** Sets up the CPU for running user code in the current

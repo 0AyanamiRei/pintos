@@ -11,6 +11,27 @@ static long long page_fault_cnt;
 static void kill (struct intr_frame *);
 static void page_fault (struct intr_frame *);
 
+
+static int
+get_user (const uint8_t *uaddr)
+{
+  int result;
+  asm ("movl $1f, %0; movzbl %1, %0; 1:"
+       : "=&a" (result) : "m" (*uaddr));
+  return result;
+}
+
+static bool
+put_user (uint8_t *udst, uint8_t byte)
+{
+  int error_code;
+  asm ("movl $1f, %0; movb %b2, %1; 1:"
+       : "=&a" (error_code), "=m" (*udst) : "q" (byte));
+  return error_code != -1;
+}
+
+
+
 /** Registers handlers for interrupts that can be caused by user
    programs.
 
@@ -148,14 +169,18 @@ page_fault (struct intr_frame *f)
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
 
+  if(f->vec_num == 14) {
+   
+  }
+
   /* To implement virtual memory, delete the rest of the function
      body, and replace it with code that brings in the page to
      which fault_addr refers. */
-  printf ("Page fault at %p: %s error %s page in %s context.\n",
-          fault_addr,
-          not_present ? "not present" : "rights violation",
-          write ? "writing" : "reading",
-          user ? "user" : "kernel");
-  kill (f);
+//   printf ("Page fault at %p: %s error %s page in %s context.\n",
+//           fault_addr,
+//           not_present ? "not present" : "rights violation",
+//           write ? "writing" : "reading",
+//           user ? "user" : "kernel");
+//   kill (f);
 }
 

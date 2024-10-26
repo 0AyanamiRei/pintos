@@ -34,7 +34,13 @@
     "palloc.h": "c",
     "process.h": "c",
     "directory.h": "c",
-    "syscall-nr.h": "c"
+    "syscall-nr.h": "c",
+    "main.h": "c",
+    "lib.h": "c",
+    "file.h": "c",
+    "exception": "c",
+    "new": "c",
+    "stop_token": "c"
   },
   "C_Cpp.errorSquiggles": "disabled"
 }

@@ -336,7 +336,6 @@ thread_exit (void)
   
   struct thread *t = thread_current();
 
-
   list_remove (&t->allelem);
   t->status = THREAD_DYING;
   schedule ();
@@ -680,6 +679,7 @@ schedule (void) {
    * by hand.
   */
 
+  // 如果上一个线程dying, 负责回收其资源
   thread_schedule_tail (prev);
 }
 

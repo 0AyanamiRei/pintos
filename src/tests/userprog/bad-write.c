@@ -7,6 +7,6 @@
 void
 test_main (void) 
 {
-  *(volatile int *)NULL = 42;
+  *(volatile int *)NULL = 42; // 报的是pagefault, 没有走系统调用
   fail ("should have exited with -1");
 }
