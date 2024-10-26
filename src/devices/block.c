@@ -130,6 +130,7 @@ block_read (struct block *block, block_sector_t sector, void *buffer)
    acknowledged receiving the data.
    Internally synchronizes accesses to block devices, so external
    per-block device locking is unneeded. */
+/*写入block对应的设备,sector表示扇区号,buffer表示写入的内容*/
 void
 block_write (struct block *block, block_sector_t sector, const void *buffer)
 {

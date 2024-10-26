@@ -57,7 +57,6 @@ filesys_create (const char *name, off_t initial_size)
 
   return success;
 }
-
 /** Opens the file with the given NAME.
    Returns the new file if successful or a null pointer
    otherwise.

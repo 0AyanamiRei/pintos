@@ -24,6 +24,7 @@ free_map_init (void)
    Returns true if successful, false if not enough consecutive
    sectors were available or if the free_map file could not be
    written. */
+/*分配连续的cnt个sector,起始扇区号存储在sectorp中*/
 bool
 free_map_allocate (size_t cnt, block_sector_t *sectorp)
 {

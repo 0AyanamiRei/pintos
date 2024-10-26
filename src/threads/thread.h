@@ -56,8 +56,9 @@ typedef int tid_t;
    or be an element in a semaphore wait list (synch.c).    (in blocked state)
    
    (they are mutually exclusive) */
+#define NOFILE 16
+struct file;
 
-   
 struct thread {
   /* Owned by thread.c. */
   tid_t tid;                          /**< Thread identifier. */
@@ -70,10 +71,10 @@ struct thread {
 
   /* Shared between thread.c and synch.c. */
   struct list_elem elem;              /**< List element. */
-
   #ifdef USERPROG
   /* Owned by userprog/process.c. */
-  uint32_t *pagedir;                  /**< Page directory. */
+  uint32_t *pagedir;                /**< Page directory. */
+  struct file *ofile[NOFILE];
   #endif
 
   
