@@ -1,6 +1,6 @@
 #include <syscall.h>
 #include "../syscall-nr.h"
-
+/*参数的压栈顺序从右到左*/
 /** Invokes syscall NUMBER, passing no arguments, and returns the
    return value as an `int'. */
 #define syscall0(NUMBER)                                        \

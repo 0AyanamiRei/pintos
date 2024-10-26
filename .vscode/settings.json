@@ -34,7 +34,13 @@
     "palloc.h": "c",
     "process.h": "c",
     "directory.h": "c",
-    "syscall-nr.h": "c"
+    "syscall-nr.h": "c",
+    "pagedir.h": "c",
+    "main.h": "c",
+    "file.h": "c",
+    "filesys.h": "c",
+    "off_t.h": "c",
+    "free-map.h": "c"
   },
   "C_Cpp.errorSquiggles": "disabled"
 }

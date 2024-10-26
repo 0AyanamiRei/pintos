@@ -6,12 +6,13 @@
 #include "filesys/filesys.h"
 #include "filesys/free-map.h"
 #include "threads/malloc.h"
-
+/*以扇区为单位的I/O,freemap维护扇区的可用信息*/
 /** Identifies an inode. */
 #define INODE_MAGIC 0x494e4f44
 
 /** On-disk inode.
    Must be exactly BLOCK_SECTOR_SIZE bytes long. */
+/*磁盘中的一个inode的长度是一个扇区(512bytes)*/
 struct inode_disk
   {
     block_sector_t start;               /**< First data sector. */
@@ -22,6 +23,7 @@ struct inode_disk
 
 /** Returns the number of sectors to allocate for an inode SIZE
    bytes long. */
+/*获取file的size 以扇区(512bytes)的数量表示*/
 static inline size_t
 bytes_to_sectors (off_t size)
 {
@@ -29,20 +31,22 @@ bytes_to_sectors (off_t size)
 }
 
 /** In-memory inode. */
+/*内存中应该存在一个inode表*/
 struct inode 
   {
     struct list_elem elem;              /**< Element in inode list. */
-    block_sector_t sector;              /**< Sector number of disk location. */
+    block_sector_t sector;              /**< Sector number of disk location. 该inode元信息的扇区号*/
     int open_cnt;                       /**< Number of openers. */
     bool removed;                       /**< True if deleted, false otherwise. */
     int deny_write_cnt;                 /**< 0: writes ok, >0: deny writes. */
-    struct inode_disk data;             /**< Inode content. */
+    struct inode_disk data;             /**< Inode content. 存储的inode的具体内容*/
   };
 
 /** Returns the block device sector that contains byte offset POS
    within INODE.
    Returns -1 if INODE does not contain data for a byte at offset
    POS. */
+/*返回偏移量pos对应的扇区号*/
 static block_sector_t
 byte_to_sector (const struct inode *inode, off_t pos) 
 {
@@ -69,6 +73,9 @@ inode_init (void)
    device.
    Returns true if successful.
    Returns false if memory or disk allocation fails. */
+/*创建一个inode,并且分配大小为length的磁盘空间
+详细说明:用disk_inode临时存储该inode的元信息
+*/
 bool
 inode_create (block_sector_t sector, off_t length)
 {
@@ -151,6 +158,7 @@ inode_reopen (struct inode *inode)
 }
 
 /** Returns INODE's inode number. */
+/*获取该inode对应的扇区号*/
 block_sector_t
 inode_get_inumber (const struct inode *inode)
 {
@@ -187,6 +195,7 @@ inode_close (struct inode *inode)
 
 /** Marks INODE to be deleted when it is closed by the last caller who
    has it open. */
+/*设置为remove*/
 void
 inode_remove (struct inode *inode) 
 {
@@ -197,6 +206,7 @@ inode_remove (struct inode *inode)
 /** Reads SIZE bytes from INODE into BUFFER, starting at position OFFSET.
    Returns the number of bytes actually read, which may be less
    than SIZE if an error occurs or end of file is reached. */
+/*inode_read*/
 off_t
 inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset) 
 {
@@ -254,6 +264,7 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset)
    less than SIZE if end of file is reached or an error occurs.
    (Normally a write at end of file would extend the inode, but
    growth is not yet implemented.) */
+/*inode_write*/
 off_t
 inode_write_at (struct inode *inode, const void *buffer_, off_t size,
                 off_t offset) 
@@ -338,6 +349,7 @@ inode_allow_write (struct inode *inode)
 }
 
 /** Returns the length, in bytes, of INODE's data. */
+/*返回inode的data长度*/
 off_t
 inode_length (const struct inode *inode)
 {
