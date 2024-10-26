@@ -11,27 +11,6 @@ static long long page_fault_cnt;
 static void kill (struct intr_frame *);
 static void page_fault (struct intr_frame *);
 
-
-static int
-get_user (const uint8_t *uaddr)
-{
-  int result;
-  asm ("movl $1f, %0; movzbl %1, %0; 1:"
-       : "=&a" (result) : "m" (*uaddr));
-  return result;
-}
-
-static bool
-put_user (uint8_t *udst, uint8_t byte)
-{
-  int error_code;
-  asm ("movl $1f, %0; movb %b2, %1; 1:"
-       : "=&a" (error_code), "=m" (*udst) : "q" (byte));
-  return error_code != -1;
-}
-
-
-
 /** Registers handlers for interrupts that can be caused by user
    programs.
 
@@ -104,6 +83,7 @@ kill (struct intr_frame *f)
      exception originated. */
   switch (f->cs)
     {
+    // 用户代码段异常处理：  
     case SEL_UCSEG:
       /* User's code segment, so it's a user exception, as we
          expected.  Kill the user process.  */
@@ -111,7 +91,7 @@ kill (struct intr_frame *f)
               thread_name (), f->vec_no, intr_name (f->vec_no));
       intr_dump_frame (f);
       thread_exit (); 
-
+    // 内核代码段异常处理
     case SEL_KCSEG:
       /* Kernel's code segment, which indicates a kernel bug.
          Kernel code shouldn't throw exceptions.  (Page faults
@@ -119,7 +99,7 @@ kill (struct intr_frame *f)
          here.)  Panic the kernel to make the point.  */
       intr_dump_frame (f);
       PANIC ("Kernel bug - unexpected interrupt in kernel"); 
-
+    // 未知代码段处理
     default:
       /* Some other code segment?  Shouldn't happen.  Panic the
          kernel. */
@@ -168,19 +148,27 @@ page_fault (struct intr_frame *f)
   not_present = (f->error_code & PF_P) == 0;
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
-
-  if(f->vec_num == 14) {
-   
+  
+  // page_fault_triggered_by_a_bad_reference_from_a_system_call
+  if(user == false) {
+   f->eip = (void (*) (void)) f->eax;
+   f->eax = -1;
+   return;
+  } else { // 来自user的page fault
+   printf ("%s: exit(-1)\n", thread_current()->name);
+   thread_exit();
   }
+
+
 
   /* To implement virtual memory, delete the rest of the function
      body, and replace it with code that brings in the page to
      which fault_addr refers. */
-//   printf ("Page fault at %p: %s error %s page in %s context.\n",
-//           fault_addr,
-//           not_present ? "not present" : "rights violation",
-//           write ? "writing" : "reading",
-//           user ? "user" : "kernel");
-//   kill (f);
+  printf ("Page fault at %p: %s error %s page in %s context.\n",
+          fault_addr,
+          not_present ? "not present" : "rights violation",
+          write ? "writing" : "reading",
+          user ? "user" : "kernel");
+  kill (f);
 }
 

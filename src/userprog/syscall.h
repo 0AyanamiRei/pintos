@@ -6,7 +6,6 @@
 extern struct intr_frame;
 
 void syscall_init (void);
-int arg_int32(int n, struct intr_frame *f);
 
 
 /** Projects 2 and later. */

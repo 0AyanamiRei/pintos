@@ -5,23 +5,29 @@
 #include "threads/thread.h"
 #include "filesys/filesys.h"
 #include "filesys/file.h"
+#include "threads/vaddr.h"
 
 static void syscall_handler (struct intr_frame *);
+static int arg_int32 (int n, struct intr_frame *f);
+static int get_user (const uint8_t *uaddr);
+static bool put_user (uint8_t *udst, uint8_t byte);
+static void* check_ptr (const void * vaddr); 
+static void error_exit (void);
+
 
 static void SYS_halt (struct intr_frame *f);
 static void SYS_exit (struct intr_frame *f);
-static void SYS_exec (struct intr_frame *f);
-static void SYS_wait (struct intr_frame *f);
-
-static void SYS_create (struct intr_frame *f);
-static void SYS_remove (struct intr_frame *f);
+//static void SYS_exec (struct intr_frame *f);
+//static void SYS_wait (struct intr_frame *f);
+//static void SYS_create (struct intr_frame *f);
+//static void SYS_remove (struct intr_frame *f);
 static void SYS_open (struct intr_frame *f);
-static void SYS_filesize (struct intr_frame *f);
+// static void SYS_filesize (struct intr_frame *f);
 static void SYS_read (struct intr_frame *f);
 static void SYS_write (struct intr_frame *f);
 // static void SYS_seek (struct intr_frame *f);
 // static void SYS_tell (struct intr_frame *f);
-// static void SYS_close (struct intr_frame *f);
+static void SYS_close (struct intr_frame *f);
 
 /** 根据系统调用编号来执行对应的syscall */
 static void (*syscalls[])(struct intr_frame *f) = {
@@ -31,29 +37,14 @@ static void (*syscalls[])(struct intr_frame *f) = {
   // [SYS_WAIT]    SYS_wait,
   // [SYS_CREATE]  SYS_create,
   // [SYS_REMOVE]  SYS_remove,
-  // [SYS_OPEN]    SYS_open,
+  [SYS_OPEN]    SYS_open,
   // [SYS_FILESIZE] SYS_filesize,
-  // [SYS_READ]    SYS_read,
+  [SYS_READ]    SYS_read,
   [SYS_WRITE]   SYS_write,
   // [SYS_SEEK]    SYS_seek,
   // [SYS_TELL]    SYS_tell,
-  // [SYS_CLOSE]   SYS_close
+  [SYS_CLOSE]   SYS_close
 };
-static uint32_t
-parm_get(int n,struct intr_frame *f)
-{
-  
-  switch (n) {
-  case 0:
-    return *((uint32_t *)f->esp);
-  case 1:
-    return *((uint32_t *)f->esp + 1);
-  case 2:
-    return *((uint32_t *)f->esp + 2);
-  case 3:
-    return *((uint32_t *)f->esp + 3);
-  }
-}
 
 void
 syscall_init (void) 
@@ -61,13 +52,6 @@ syscall_init (void)
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
 }
 
-// 获取第n个参数, 以int32_t类型返回, n=1,2,3
-int32_t
-arg_int32(int n, struct intr_frame *f) {
-  if(n < 0 || n > 3) PANIC("error n");
-  int32_t addr = *(int32_t *)(f->esp + n * sizeof(int32_t));
-  return *(int32_t *)(f->esp + n * sizeof(int32_t));
-}
 
 static void
 syscall_handler (struct intr_frame *f)
@@ -75,12 +59,11 @@ syscall_handler (struct intr_frame *f)
   uint32_t sys_num = *(uint32_t *)(f->esp); /**< 系统调用编号 */
   // printf("sys_num = %d\n", sys_num);
   syscalls[sys_num](f);
-  thread_exit ();
 }
 
 /*分配fd描述符*/
 static uint32_t
-fdalloc(struct file *f)
+fdalloc (struct file *f)
 {
   int fd;
   struct thread * tcb = thread_current();
@@ -93,7 +76,7 @@ fdalloc(struct file *f)
   return -1;
 }
 static int
-fd2file(int fd,struct file *f)
+fd2file (int fd,struct file *f)
 {
   struct thread * tcb = thread_current();
   if (fd > -1 && fd < NOFILE && tcb->ofile[fd] != 0) {
@@ -117,36 +100,118 @@ static void
 SYS_halt (struct intr_frame *f) {
   shutdown_power_off();
 }
+
+// 假设只有user进程退出才会打印信息
+static void
+SYS_exit (struct intr_frame *f) {
+  int status = (int)arg_int32(1, f);
+  printf ("%s: exit(%d)\n", thread_current()->name, status);
+  thread_exit();
+}
+
 static void
 SYS_open(struct intr_frame *f) {
-  const char* name = parm_get(1,f);
+  const char* name = (char *)arg_int32(1, f);
   struct file * f_op;
   f_op = filesys_open(name);
   f->eax = fdalloc(f_op);
 }
+
 static void
 SYS_read (struct intr_frame *f) {
   struct file * file_;
-  int fd = parm_get(1,f);
-  void* buffer = parm_get(2,f);
-  int32_t len = parm_get(3,f);
-  fd2file(fd,file_);
-  f->eax = file_read(file_,buffer,len);
+  int fd = (int)arg_int32(1,f);
+  void* buffer = (void *)arg_int32(2,f);
+  int32_t len = arg_int32(3,f);
+  fd2file(fd, file_);
+  f->eax = file_read(file_, buffer, len);
 }
+
 static void
 SYS_write (struct intr_frame *f) {
+  // 获取参数并检查
+  int fd = (int)arg_int32(1, f);
+  const void* buffer = check_ptr((void *)arg_int32(2, f));
+  off_t size = (off_t)arg_int32(3, f);
+  
+  if(fd == 1) { /**< 向控制台输出 */
+    putbuf(buffer, size);
+    f->eax = size;
+    return;
+  }
   struct file * file_;
-  int fd = parm_get(1,f);
-  const void* buffer = parm_get(2,f);
-  int32_t len = parm_get(3,f);
-  fd2file(fd,file_);
-  f->eax = file_write(file_,buffer,len);
+  fd2file(fd, file_);
+  f->eax = file_write(file_, buffer, size);
 }
+
 static void
 SYS_close (struct intr_frame *f) {
   struct file * file_;
-  int fd = parm_get(1,f);
+  int fd = (int)arg_int32(1, f);
   fd2file(fd,file_);
   file_close(file_);
   delete_fd(fd);
+}
+
+
+// Helper function
+
+// 获取第n个参数, 以int32_t类型返回, n=1,2,3
+static int32_t
+arg_int32 (int n, struct intr_frame *f) {
+  if(n < 0 || n > 3) PANIC("error n");
+  int32_t addr = *(int32_t *)(f->esp + n * sizeof(int32_t));
+  return *(int32_t *)(f->esp + n * sizeof(int32_t));
+}
+
+/* Reads a byte at user virtual address UADDR.
+   UADDR must be below PHYS_BASE.
+   Returns the byte value if successful, -1 if a segfault
+   occurred. */
+static int
+get_user (const uint8_t *uaddr)
+{
+  int result;
+  asm ("movl $1f, %0; movzbl %1, %0; 1:"
+       : "=&a" (result) : "m" (*uaddr));
+  return result;
+}
+
+/* Writes BYTE to user address UDST.
+   UDST must be below PHYS_BASE.
+   Returns true if successful, false if a segfault occurred. */
+static bool
+put_user (uint8_t *udst, uint8_t byte)
+{
+  int error_code;
+  asm ("movl $1f, %0; movb %b2, %1; 1:"
+       : "=&a" (error_code), "=m" (*udst) : "q" (byte));
+  return error_code != -1;
+}
+
+// 检查用户传入的地址是否有效
+static void*
+check_ptr (const void * vaddr) {
+  if(!is_user_vaddr(vaddr)) {
+    goto BAD;
+  }
+
+  uint8_t *byte_ptr = (uint8_t *)vaddr;
+  for(uint8_t i = 0; i < 4; i ++) {
+    if(get_user(byte_ptr + i) == -1) {
+      goto BAD;
+    }
+  }
+
+  return vaddr;
+  BAD:
+    error_exit();
+}
+
+// 错误处理
+static void
+error_exit (void) {
+  printf ("%s: exit(-1)\n", thread_current()->name);
+  thread_exit();
+  NOT_REACHED();
 }

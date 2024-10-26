@@ -40,7 +40,9 @@
     "file.h": "c",
     "exception": "c",
     "new": "c",
-    "stop_token": "c"
+    "stop_token": "c",
+    "vaddr.h": "c",
+    "filesys.h": "c"
   },
   "C_Cpp.errorSquiggles": "disabled"
 }
