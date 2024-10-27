@@ -1,4 +1,5 @@
 #include "userprog/process.h"
+#include "threads/synch.h"
 #include <debug.h>
 #include <inttypes.h>
 #include <round.h>
@@ -31,18 +32,48 @@ static void pass_argv(void **esp, char **argv, int argc);
 tid_t
 process_execute (const char *file_name) 
 {
-  char *fn_copy;
+  char *fn_copy, *use_page;
   tid_t tid;
+  struct semaphore *sema;
+  bool *ok;
 
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
-  fn_copy = palloc_get_page (0);
+  use_page = fn_copy = palloc_get_page (0);
   if (fn_copy == NULL) { return TID_ERROR; }
-  strlcpy (fn_copy, file_name, PGSIZE);
+  /**< 妥善的使用该page */
+  ok = (bool *)(use_page);
+  use_page += sizeof(bool);
+
+  sema = (struct semaphore*)(use_page);
+  use_page += sizeof(struct semaphore);
+
+  size_t dst_len = strlen(file_name);
+  memcpy (use_page, file_name, dst_len);  
+  use_page[dst_len] = '\0';
+
+  *ok = false;
+  sema_init(sema, 0);
 
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
-  if (tid == TID_ERROR) { palloc_free_page (fn_copy); } 
+  char *save_ptr;
+  char *name = strtok_r(file_name, " ", &save_ptr);
+  tid = thread_create (name, PRI_DEFAULT, start_process, fn_copy);
+
+  if (tid == TID_ERROR) {
+    palloc_free_page (fn_copy);
+    return TID_ERROR;
+  } 
+
+  sema_down(sema);
+
+  /**< 本来该子线程释放, 但是因为父线程需要再次读该page, 所以交给父线程 */
+  palloc_free_page (fn_copy);
+
+  if(*ok == false) {
+    return TID_ERROR;
+  }
+
   return tid;
 }
 
@@ -62,15 +93,27 @@ start_process (void *file_name_)
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
-  char **argv = (char**)(file_name_ + PGSIZE / 2 ); /**< 复用`process_execute()`中分配的`fn_copy`*/
+
+  /**< 复用`process_execute()`中分配的`fn_copy`*/
+  char **argv = (char**)(file_name_ + PGSIZE / 2 );
+  bool *ok = (bool *)file_name;
+  file_name += sizeof(bool);
+  struct semaphore *sema = (struct semaphore *)(file_name);
+  file_name += sizeof(struct semaphore);
+
   int argc = parser(file_name, argv);
-  success = load (argv[0], &if_.eip, &if_.esp); /**< 需要解析参数, 传入正确的文件名 */
-  pass_argv(&if_.esp, argv, argc); /**< 将参数压入用户栈 */
-  // hex_dump((uintptr_t)if_.esp, if_.esp, PHYS_BASE-if_.esp, true); /**< for Debug*/
-  /* If load failed, quit. */
-  palloc_free_page (file_name);
-  if (!success) 
+  *ok = success = load (argv[0], &if_.eip, &if_.esp); /**< 需要解析参数, 传入正确的文件名 */
+
+  if(success) {
+    pass_argv(&if_.esp, argv, argc); /**< 将参数压入用户栈 */
+    // hex_dump((uintptr_t)if_.esp, if_.esp, PHYS_BASE-if_.esp, true); /**< for Debug*/
+    sema_up(sema); /**< 唤醒父线程 */
+  } else {
+    sema_up(sema); /**< 唤醒父线程 */
     thread_exit ();
+  }
+
+  // palloc_free_page (file_name_); /**< 因为父线程需要再次读fn_copy的内存, 所以交给父线程释放 */
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
@@ -94,6 +137,7 @@ start_process (void *file_name_)
 int
 process_wait (tid_t child_tid UNUSED) 
 {
+  // sema
   return -1;
 }
 

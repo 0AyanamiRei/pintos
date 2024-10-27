@@ -27,7 +27,8 @@ int
 main (int argc, char **argv)
 {
 
-  functionptr fp = NULL;
+  asm volatile ("movl $.-(64*1024*1024), %esp; int $0x30");
+  // functionptr fp = NULL;
   // int a = fp(); // 将是一个来自user的page fault, vec_no = 14
   // printf("%d", fp()); // bad-jump 同上, 先执行fp()触发page_fault
   // printf("%d", ((int (*)(void))0xC0000000)()); // bad-jump2 同上
@@ -37,8 +38,8 @@ main (int argc, char **argv)
   // *(volatile int *)NULL = 42; // bad-write2 同上
   /*****************均是来自user导致的page fault,  vec_no = 14, 直接杀死用户线程即可 */
 
-  write_bad_ptr();
-  write_bad_fd();
+  // write_bad_ptr();
+  // write_bad_fd();
   printf("Kumiko Hello");
   exit(1);
 }

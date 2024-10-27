@@ -132,9 +132,9 @@ pintos_init (void)
   if (*argv != NULL) {
     /* Run actions specified on kernel command line. */
     run_actions (argv);
-    char buf[INTQ_BUFSIZE] = {0};
-    memset(buf, '\0', INTQ_BUFSIZE); // clear
-    gets(buf, INTQ_BUFSIZE); // get input
+    // char buf[INTQ_BUFSIZE] = {0};
+    // memset(buf, '\0', INTQ_BUFSIZE); // clear
+    // gets(buf, INTQ_BUFSIZE); // get input
   } else {
     run_kernel_shell();
   }

@@ -1,4 +1,5 @@
 #include "userprog/syscall.h"
+#include "userprog/process.h"
 #include <stdio.h>
 #include <syscall-nr.h>
 #include "threads/interrupt.h"
@@ -17,8 +18,8 @@ static void error_exit (void);
 
 static void SYS_halt (struct intr_frame *f);
 static void SYS_exit (struct intr_frame *f);
-//static void SYS_exec (struct intr_frame *f);
-//static void SYS_wait (struct intr_frame *f);
+static void SYS_exec (struct intr_frame *f);
+static void SYS_wait (struct intr_frame *f);
 //static void SYS_create (struct intr_frame *f);
 //static void SYS_remove (struct intr_frame *f);
 static void SYS_open (struct intr_frame *f);
@@ -51,7 +52,6 @@ syscall_init (void)
 {
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
 }
-
 
 static void
 syscall_handler (struct intr_frame *f)
@@ -107,6 +107,21 @@ SYS_exit (struct intr_frame *f) {
   int status = (int)arg_int32(1, f);
   printf ("%s: exit(%d)\n", thread_current()->name, status);
   thread_exit();
+}
+
+// 创建子进程并返回其tid_t
+// the parent process cannot return from the exec until it knows
+// whether the child process successfully loaded its executable. 
+// You must use appropriate synchronization to ensure this.
+static void
+SYS_exec (struct intr_frame *f) {
+  const char *file = (char *)check_ptr((void *)arg_int32(1, f));
+  f->eax = process_execute(file);
+}
+
+static void
+SYS_wait (struct intr_frame *f) {
+
 }
 
 static void
