@@ -5,6 +5,7 @@
 #include <list.h>
 #include <stdint.h>
 #include "fix-point.h"
+#include "threads/synch.h"
 
 /** States in a thread's life cycle. */
 enum thread_status
@@ -59,6 +60,16 @@ typedef int tid_t;
 #define NOFILE 16
 struct file;
 
+
+// 由于Pintos中, 子线程的资源并不是由父线程释放
+// 所以当子线程死亡后, 父线程就不能访问其TCB了
+struct child {
+  struct list_elem child_elem;
+  tid_t tid;
+  int exit_status;
+  struct semaphore sema;
+};
+
 struct thread {
   /* Owned by thread.c. */
   tid_t tid;                          /**< Thread identifier. */
@@ -76,7 +87,9 @@ struct thread {
   uint32_t *pagedir;                /**< Page directory. */
   struct file *ofile[NOFILE];
   #endif
-
+  int exit_status;
+  struct list child_list;
+  struct child *self;
   
   int nice;                   /**< 多级反馈队列 */
   int64_t recent_cpu;
@@ -84,7 +97,6 @@ struct thread {
 	int real_priority;                 
 	struct list locks_held;             
 	struct lock *current_lock;          
-	     
   
   struct list_elem sleepelem;       /**< 追踪睡眠队列 */
   int64_t sleep_time;               /**< 用于记录睡眠所需时长 */
@@ -143,6 +155,5 @@ void thread_ready_rearrange (struct thread *);
 void thread_update_priority (struct thread *);
 void thread_ready_rearrange (struct thread *);
 void thread_tick_one_second (void);
-
 
 #endif /**< threads/thread.h */

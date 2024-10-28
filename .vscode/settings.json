@@ -43,7 +43,9 @@
     "stop_token": "c",
     "vaddr.h": "c",
     "filesys.h": "c",
-    "cstdlib": "c"
+    "cstdlib": "c",
+    "malloc.h": "c",
+    "switch.h": "c"
   },
   "C_Cpp.errorSquiggles": "disabled"
 }

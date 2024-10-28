@@ -20,30 +20,30 @@ static void SYS_halt (struct intr_frame *f);
 static void SYS_exit (struct intr_frame *f);
 static void SYS_exec (struct intr_frame *f);
 static void SYS_wait (struct intr_frame *f);
-//static void SYS_create (struct intr_frame *f);
-//static void SYS_remove (struct intr_frame *f);
+static void SYS_create (struct intr_frame *f);
+static void SYS_remove (struct intr_frame *f);
 static void SYS_open (struct intr_frame *f);
-// static void SYS_filesize (struct intr_frame *f);
+static void SYS_filesize (struct intr_frame *f);
 static void SYS_read (struct intr_frame *f);
 static void SYS_write (struct intr_frame *f);
-// static void SYS_seek (struct intr_frame *f);
-// static void SYS_tell (struct intr_frame *f);
+static void SYS_seek (struct intr_frame *f);
+static void SYS_tell (struct intr_frame *f);
 static void SYS_close (struct intr_frame *f);
 
 /** 根据系统调用编号来执行对应的syscall */
 static void (*syscalls[])(struct intr_frame *f) = {
   [SYS_HALT]    SYS_halt,
   [SYS_EXIT]    SYS_exit,
-  // [SYS_EXEC]    SYS_exec,
-  // [SYS_WAIT]    SYS_wait,
-  // [SYS_CREATE]  SYS_create,
-  // [SYS_REMOVE]  SYS_remove,
+  [SYS_EXEC]    SYS_exec,
+  [SYS_WAIT]    SYS_wait,
+  [SYS_CREATE]  SYS_create,
+  [SYS_REMOVE]  SYS_remove,
   [SYS_OPEN]    SYS_open,
-  // [SYS_FILESIZE] SYS_filesize,
+  [SYS_FILESIZE] SYS_filesize,
   [SYS_READ]    SYS_read,
   [SYS_WRITE]   SYS_write,
-  // [SYS_SEEK]    SYS_seek,
-  // [SYS_TELL]    SYS_tell,
+  [SYS_SEEK]    SYS_seek,
+  [SYS_TELL]    SYS_tell,
   [SYS_CLOSE]   SYS_close
 };
 
@@ -56,6 +56,7 @@ syscall_init (void)
 static void
 syscall_handler (struct intr_frame *f)
 {
+  check_ptr((void *)(f->esp));
   uint32_t sys_num = *(uint32_t *)(f->esp); /**< 系统调用编号 */
   // printf("sys_num = %d\n", sys_num);
   syscalls[sys_num](f);
@@ -104,15 +105,13 @@ SYS_halt (struct intr_frame *f) {
 // 假设只有user进程退出才会打印信息
 static void
 SYS_exit (struct intr_frame *f) {
-  int status = (int)arg_int32(1, f);
-  printf ("%s: exit(%d)\n", thread_current()->name, status);
+  struct thread *t = thread_current();
+  t->exit_status = t->self->exit_status = (int)arg_int32(1, f);
   thread_exit();
 }
 
 // 创建子进程并返回其tid_t
-// the parent process cannot return from the exec until it knows
-// whether the child process successfully loaded its executable. 
-// You must use appropriate synchronization to ensure this.
+// 使用条件变量控制, 直到子线程加载完毕才返回tid给父线程
 static void
 SYS_exec (struct intr_frame *f) {
   const char *file = (char *)check_ptr((void *)arg_int32(1, f));
@@ -121,25 +120,32 @@ SYS_exec (struct intr_frame *f) {
 
 static void
 SYS_wait (struct intr_frame *f) {
+  int32_t p_id = arg_int32(1, f);
+  f->eax = process_wait(p_id);
+}
 
+
+static void SYS_create (struct intr_frame *f) {
+  error_exit();
+}
+
+static void SYS_remove (struct intr_frame *f) {
+  error_exit();
 }
 
 static void
 SYS_open(struct intr_frame *f) {
-  const char* name = (char *)arg_int32(1, f);
-  struct file * f_op;
-  f_op = filesys_open(name);
-  f->eax = fdalloc(f_op);
+  error_exit();
+}
+
+
+static void SYS_filesize (struct intr_frame *f) {
+  error_exit();
 }
 
 static void
 SYS_read (struct intr_frame *f) {
-  struct file * file_;
-  int fd = (int)arg_int32(1,f);
-  void* buffer = (void *)arg_int32(2,f);
-  int32_t len = arg_int32(3,f);
-  fd2file(fd, file_);
-  f->eax = file_read(file_, buffer, len);
+  error_exit();
 }
 
 static void
@@ -153,19 +159,22 @@ SYS_write (struct intr_frame *f) {
     putbuf(buffer, size);
     f->eax = size;
     return;
+  } else {
+    error_exit();
   }
-  struct file * file_;
-  fd2file(fd, file_);
-  f->eax = file_write(file_, buffer, size);
+}
+
+static void SYS_seek (struct intr_frame *f) {
+  error_exit();
+}
+
+static void SYS_tell (struct intr_frame *f) {
+  error_exit();
 }
 
 static void
 SYS_close (struct intr_frame *f) {
-  struct file * file_;
-  int fd = (int)arg_int32(1, f);
-  fd2file(fd,file_);
-  file_close(file_);
-  delete_fd(fd);
+  error_exit();
 }
 
 
@@ -175,8 +184,9 @@ SYS_close (struct intr_frame *f) {
 static int32_t
 arg_int32 (int n, struct intr_frame *f) {
   if(n < 0 || n > 3) PANIC("error n");
-  int32_t addr = *(int32_t *)(f->esp + n * sizeof(int32_t));
-  return *(int32_t *)(f->esp + n * sizeof(int32_t));
+  int32_t *addr = (int32_t *)(f->esp + n * sizeof(int32_t));
+  check_ptr((void *)addr);
+  return *addr;
 }
 
 /* Reads a byte at user virtual address UADDR.
@@ -226,7 +236,7 @@ check_ptr (const void * vaddr) {
 // 错误处理
 static void
 error_exit (void) {
-  printf ("%s: exit(-1)\n", thread_current()->name);
+  thread_current()->exit_status = -1;
   thread_exit();
   NOT_REACHED();
 }

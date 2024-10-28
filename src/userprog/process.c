@@ -16,6 +16,7 @@
 #include "threads/init.h"
 #include "threads/interrupt.h"
 #include "threads/palloc.h"
+#include "threads/malloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 
@@ -56,9 +57,10 @@ process_execute (const char *file_name)
   sema_init(sema, 0);
 
   /* Create a new thread to execute FILE_NAME. */
-  char *save_ptr;
-  char *name = strtok_r(file_name, " ", &save_ptr);
-  tid = thread_create (name, PRI_DEFAULT, start_process, fn_copy);
+  int *argc = (int *)(fn_copy + PGSIZE / 2 );
+  char **argv = (char**)(fn_copy + PGSIZE / 2 + sizeof(int *));
+  *argc = parser(use_page, argv);
+  tid = thread_create (argv[0], PRI_DEFAULT, start_process, fn_copy);
 
   if (tid == TID_ERROR) {
     palloc_free_page (fn_copy);
@@ -68,12 +70,13 @@ process_execute (const char *file_name)
   sema_down(sema);
 
   /**< 本来该子线程释放, 但是因为父线程需要再次读该page, 所以交给父线程 */
-  palloc_free_page (fn_copy);
 
   if(*ok == false) {
+    palloc_free_page (fn_copy);
     return TID_ERROR;
   }
 
+  palloc_free_page (fn_copy);
   return tid;
 }
 
@@ -95,25 +98,23 @@ start_process (void *file_name_)
   if_.eflags = FLAG_IF | FLAG_MBS;
 
   /**< 复用`process_execute()`中分配的`fn_copy`*/
-  char **argv = (char**)(file_name_ + PGSIZE / 2 );
   bool *ok = (bool *)file_name;
   file_name += sizeof(bool);
   struct semaphore *sema = (struct semaphore *)(file_name);
   file_name += sizeof(struct semaphore);
+  int *argc = (int *)(file_name_ + PGSIZE / 2 );
+  char **argv = (char**)(file_name_ + PGSIZE / 2 + sizeof(int *));
 
-  int argc = parser(file_name, argv);
   *ok = success = load (argv[0], &if_.eip, &if_.esp); /**< 需要解析参数, 传入正确的文件名 */
 
   if(success) {
-    pass_argv(&if_.esp, argv, argc); /**< 将参数压入用户栈 */
+    pass_argv(&if_.esp, argv, *argc); /**< 将参数压入用户栈 */
     // hex_dump((uintptr_t)if_.esp, if_.esp, PHYS_BASE-if_.esp, true); /**< for Debug*/
     sema_up(sema); /**< 唤醒父线程 */
   } else {
     sema_up(sema); /**< 唤醒父线程 */
     thread_exit ();
   }
-
-  // palloc_free_page (file_name_); /**< 因为父线程需要再次读fn_copy的内存, 所以交给父线程释放 */
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
@@ -135,10 +136,28 @@ start_process (void *file_name_)
    This function will be implemented in problem 2-2.  For now, it
    does nothing. */
 int
-process_wait (tid_t child_tid UNUSED) 
+process_wait (tid_t child_tid UNUSED)
 {
-  // sema
-  return -1;
+  // 从队列中找到child
+  struct thread *parent = thread_current();
+  struct list_elem *e;
+  struct child *c = NULL;
+  for (e = list_begin (&parent->child_list); e != list_end (&parent->child_list); e = list_next (e)) {
+    c = list_entry (e, struct child, child_elem);
+    if(c->tid == child_tid) {
+      break;
+    }
+  }
+  /**< 错误的child_tid */
+  if(c == list_end (&parent->child_list)) {
+    return -1;
+  }
+  sema_down(&c->sema);
+  /**< 该子线程执行完 */
+  list_remove(e);
+  int exit_status = c->exit_status;
+  free(c); /**< 该资源交给父线程来释放, 子线程self只用于获取使用权 */
+  return exit_status;
 }
 
 /** Free the current process's resources. */

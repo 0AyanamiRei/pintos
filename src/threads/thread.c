@@ -11,6 +11,7 @@
 #include "threads/switch.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
+#include "threads/malloc.h"
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
@@ -216,6 +217,13 @@ thread_create (const char  *name,
   init_thread (t, name, priority);
   t->nice = thread_current()->nice;
   tid = t->tid = allocate_tid ();
+  
+  /* 让父线程获取一部分子线程的句柄资源*/
+  t->self = malloc (sizeof(struct child));
+  t->self->tid = tid;
+  t->self->exit_status = t->exit_status = -1;
+  sema_init (&t->self->sema, 0);
+  list_push_back (&thread_current()->child_list, &t->self->child_elem);
 
   /* Stack frame for kernel_thread(). */
   kf = alloc_frame (t, sizeof *kf);
@@ -335,8 +343,11 @@ thread_exit (void)
   intr_disable ();
   
   struct thread *t = thread_current();
+  printf ("%s: exit(%d)\n", t->name, t->exit_status);
 
   list_remove (&t->allelem);
+  t->self->exit_status = t->exit_status;
+  sema_up(&t->self->sema);
   t->status = THREAD_DYING;
   schedule ();
   NOT_REACHED ();
@@ -531,10 +542,10 @@ init_thread (struct thread *t, const char *name, int priority)
   t->real_priority = priority;
   t->current_lock = NULL;
   list_init (&t->locks_held);
+  list_init (&t->child_list);
   t->magic = THREAD_MAGIC;
 
   old_level = intr_disable ();
-
 
   /** initilize param used to BSD */
 

@@ -155,7 +155,7 @@ page_fault (struct intr_frame *f)
    f->eax = -1;
    return;
   } else { // 来自user的page fault
-   printf ("%s: exit(-1)\n", thread_current()->name);
+   thread_current()->exit_status = -1;
    thread_exit();
   }
 
