@@ -45,7 +45,8 @@
     "filesys.h": "c",
     "cstdlib": "c",
     "malloc.h": "c",
-    "switch.h": "c"
+    "switch.h": "c",
+    "atomic": "c"
   },
   "C_Cpp.errorSquiggles": "disabled"
 }

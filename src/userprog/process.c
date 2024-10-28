@@ -149,7 +149,7 @@ process_wait (tid_t child_tid UNUSED)
     }
   }
   /**< 错误的child_tid */
-  if(c == list_end (&parent->child_list)) {
+  if(e == list_end (&parent->child_list)) {
     return -1;
   }
   sema_down(&c->sema);
