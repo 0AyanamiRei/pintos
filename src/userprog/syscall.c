@@ -62,6 +62,26 @@ syscall_handler (struct intr_frame *f)
   syscalls[sys_num](f);
 }
 
+/* fd->_file */
+struct _file*
+fd2file (int fd) {
+  struct thread *t = thread_current();
+  struct list_elem *e;
+  struct _file *_f;
+
+  if(fd <= 2 || fd > 1024 ) {
+    return NULL;
+  }
+
+  for(e = list_begin(&t->file_list); e != list_end(&t->file_list); e = list_next(e)) {
+    _f = list_entry (e, struct _file, file_elem);
+    if(_f->fd == fd) {
+      return _f;
+    }
+  }
+  return NULL;
+}
+
 /*分配fd描述符*/
 static int32_t
 fd_alloc (const char *file_name)
@@ -109,37 +129,22 @@ fd_alloc (const char *file_name)
   return fd;
 }
 
+/*关闭fd描述符 @todo 复用fd  */
 static void
 fd_close (int fd) {
-  fslk_acquire();
-  struct file *file_temp;
   struct thread *t = thread_current();
   struct list_elem *e;
-  struct _file *_f;
+  struct _file *_f = fd2file(fd);
 
-  for(e = list_begin(&t->file_list); e != list_end(&t->file_list); e = list_next(e)) {
-    _f = list_entry (e, struct _file, file_elem);
-    if(_f->fd == fd) {
-      break;
-    }
-  }
-  if(e != list_end (&t->file_list)) {
+  if(_f != NULL) {
+    fslk_acquire();
     file_close (_f->file); /**< 关闭文件 */
-    _f->file = NULL; /**< 设置标志: 该fd可重用*/
-  } 
-
-  fslk_release();
+    fslk_release();
+    list_remove(&_f->file_elem);
+    free(_f);
+  }
 }
 
-static int
-fd2file (int fd,struct file *f)
-{
-  return -1;
-}
-static int
-delete_fd (int fd) {
-  return -1;
-}
 
 /****系统调用实现****/
 static void
@@ -198,14 +203,40 @@ SYS_close (struct intr_frame *f) {
   fd_close(fd);
 }
 
-
+/*获取文件长度*/
 static void SYS_filesize (struct intr_frame *f) {
-  error_exit();
+  int fd = (int)arg_int32(1, f);
+  struct _file *_f = fd2file(fd);
+  if(_f != NULL) {
+    fslk_acquire();
+    f->eax = file_length(_f->file);
+    fslk_release();
+  } else { 
+    f->eax = -1;
+  }
 }
 
 static void
 SYS_read (struct intr_frame *f) {
-  error_exit();
+  int fd = (int)arg_int32(1, f);
+  uint8_t *buffer = check_ptr((void *)arg_int32(2, f));
+  off_t size = (off_t)arg_int32(3, f);
+
+  if (fd == 0) { /**< stdin */
+    for (int i = 0; i < size; i++) {
+      buffer[i] = input_getc();
+    }
+    f->eax = size;
+  } else {
+    struct _file *_f = fd2file(fd);
+    if(_f != NULL) {
+      fslk_acquire();
+      f->eax = file_read(_f->file, buffer, size);
+      fslk_release();
+    } else { 
+      f->eax = -1;
+    }
+  }
 }
 
 static void
@@ -220,16 +251,40 @@ SYS_write (struct intr_frame *f) {
     f->eax = size;
     return;
   } else {
-    error_exit();
+    struct _file *_f = fd2file(fd);
+    if(_f != NULL) {
+      fslk_acquire();
+      f->eax = file_write(_f->file, buffer, size);
+      fslk_release();
+    } else { 
+      f->eax = 0;
+    }
   }
 }
 
 static void SYS_seek (struct intr_frame *f) {
-  error_exit();
+  int fd = (int)arg_int32(1, f);
+  unsigned position = (unsigned)arg_int32(2, f);
+  struct _file *_f = fd2file(fd);
+  if(_f != NULL) {
+    fslk_acquire();
+    file_seek(_f->file, position);
+    fslk_release();
+  }
+
 }
 
 static void SYS_tell (struct intr_frame *f) {
-  error_exit();
+  int fd = (int)arg_int32(1, f);
+  struct _file *_f = fd2file(fd);
+  if(_f != NULL) {
+    fslk_acquire();
+    f->eax = file_tell(_f->file);
+    fslk_release();
+  } else {
+    f->eax = -1;
+  }
+  
 }
 
 

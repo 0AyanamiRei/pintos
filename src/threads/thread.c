@@ -12,6 +12,8 @@
 #include "threads/synch.h"
 #include "threads/vaddr.h"
 #include "threads/malloc.h"
+#include "filesys/filesys.h"
+#include "filesys/file.h"
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
@@ -355,11 +357,13 @@ thread_exit (void)
     list_entry (e, struct child, child_elem)->tid = -1;
   }
 
-  e = list_begin(&t->file_list);
   struct _file *f;
-  while(e != list_end(&t->file_list)) {
+  while(!list_empty(&t->file_list)) {
+    e = list_pop_back(&t->file_list);
     f = list_entry (e, struct _file, file_elem);
-    e = list_next(e);
+    fslk_acquire();
+    file_close(f->file);
+    fslk_release();
     free(f);
   }
 
