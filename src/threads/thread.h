@@ -57,8 +57,15 @@ typedef int tid_t;
    or be an element in a semaphore wait list (synch.c).    (in blocked state)
    
    (they are mutually exclusive) */
-#define NOFILE 16
-struct file;
+
+// 很神秘,  文件系统提供的接口不是并发安全的
+struct _file {
+  struct list_elem file_elem;
+  struct file *file;
+  int fd;
+  struct lock lk UNUSED; /**< 暂时不理解锁资源在父子进程间处理 */
+  int pin_cnt UNUSED; /**< 暂时无并发访问文件 */
+};
 
 
 // 由于Pintos中, 子线程的资源并不是由父线程释放
@@ -85,11 +92,15 @@ struct thread {
   #ifdef USERPROG
   /* Owned by userprog/process.c. */
   uint32_t *pagedir;                /**< Page directory. */
-  struct file *ofile[NOFILE];
   #endif
+  /** @todo self的资源释放问题, 因为父线程有可能比子线程先终止
+   * 策略: 如果子线程发现父线程死亡, 那么交给子线程free(self) 
+   * 父线程在thread_exit() 中设置 `self->tid=-1` 来标识 */
   int exit_status;
-  struct list child_list;
-  struct child *self;
+  struct list child_list; /**< 追踪子线程 */
+  struct child *self;  /**< 与父线程通信 */
+
+  struct list file_list; /**< 管理持有的文件 */
   
   int nice;                   /**< 多级反馈队列 */
   int64_t recent_cpu;
@@ -155,5 +166,9 @@ void thread_ready_rearrange (struct thread *);
 void thread_update_priority (struct thread *);
 void thread_ready_rearrange (struct thread *);
 void thread_tick_one_second (void);
+
+/** FSsys*/
+void fslk_acquire();
+void fslk_release();
 
 #endif /**< threads/thread.h */

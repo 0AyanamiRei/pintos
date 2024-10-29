@@ -40,6 +40,9 @@ static struct thread *initial_thread;
 /** Lock used by allocate_tid(). */
 static struct lock tid_lock;
 
+/** 保护`filesys_create&remove`*/
+static struct lock file_lock;
+
 /** Stack frame for kernel_thread(). */
 struct kernel_thread_frame 
   {
@@ -96,6 +99,7 @@ thread_init (void) {
   ASSERT (intr_get_level () == INTR_OFF);
 
   lock_init (&tid_lock);
+  lock_init (&file_lock);
   list_init (&ready_list);
   list_init (&all_list);
   list_init (&sleep_list);
@@ -343,14 +347,33 @@ thread_exit (void)
   intr_disable ();
   
   struct thread *t = thread_current();
+  struct list_elem *e;
   printf ("%s: exit(%d)\n", t->name, t->exit_status);
+
+  // 设置标志`-1` 让子线程释放
+  for(e = list_begin(&t->child_list); e != list_end(&t->child_list); e = list_next(e)) {
+    list_entry (e, struct child, child_elem)->tid = -1;
+  }
+
+  e = list_begin(&t->file_list);
+  struct _file *f;
+  while(e != list_end(&t->file_list)) {
+    f = list_entry (e, struct _file, file_elem);
+    e = list_next(e);
+    free(f);
+  }
+
+  // 如果子线程先死亡, t->self还没释放, 可以读
+  // 如果父线程先死亡, t->self也没释放, 可以读
+  if(t->self->tid == -1) {
+    free(t->self);
+  }
 
   list_remove (&t->allelem);
   t->self->exit_status = t->exit_status;
   sema_up(&t->self->sema);
   t->status = THREAD_DYING;
   schedule ();
-  NOT_REACHED ();
 }
 
 /** Yields the CPU.  The current thread is not put to sleep and
@@ -543,6 +566,7 @@ init_thread (struct thread *t, const char *name, int priority)
   t->current_lock = NULL;
   list_init (&t->locks_held);
   list_init (&t->child_list);
+  list_init (&t->file_list);
   t->magic = THREAD_MAGIC;
 
   old_level = intr_disable ();
@@ -822,4 +846,14 @@ thread_update_priority_mlfqs(struct thread *t)
   else if (new_priority < PRI_MIN)
     new_priority = PRI_MIN;
   t->priority = new_priority;
+}
+
+void
+fslk_acquire() {
+  lock_acquire (&file_lock);
+}
+
+void
+fslk_release() {
+  lock_release (&file_lock);
 }

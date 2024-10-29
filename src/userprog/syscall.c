@@ -4,6 +4,7 @@
 #include <syscall-nr.h>
 #include "threads/interrupt.h"
 #include "threads/thread.h"
+#include "threads/malloc.h"
 #include "filesys/filesys.h"
 #include "filesys/file.h"
 #include "threads/vaddr.h"
@@ -14,7 +15,6 @@ static int get_user (const uint8_t *uaddr);
 static bool put_user (uint8_t *udst, uint8_t byte);
 static void* check_ptr (const void * vaddr); 
 static void error_exit (void);
-
 
 static void SYS_halt (struct intr_frame *f);
 static void SYS_exit (struct intr_frame *f);
@@ -63,36 +63,81 @@ syscall_handler (struct intr_frame *f)
 }
 
 /*分配fd描述符*/
-static uint32_t
-fdalloc (struct file *f)
+static int32_t
+fd_alloc (const char *file_name)
 {
-  int fd;
-  struct thread * tcb = thread_current();
-  for(fd = 0; fd < NOFILE; fd++){
-    if(tcb->ofile[fd] == 0){
-      tcb->ofile[fd] = f;
-      return fd;
+  fslk_acquire();
+  struct file *file_temp;
+  struct thread *t = thread_current();
+  struct list_elem *e;
+  struct _file *_f;
+  int fd = -1;
+
+  /**< 检查是否该文件可打开 */
+  file_temp = filesys_open(file_name);
+  if(file_temp == NULL) {
+    fslk_release();
+    return fd;
+  }
+
+  if(list_empty(&t->file_list)) { /**< 初次分配 */
+    _f = malloc(sizeof(struct _file));
+    _f->fd = stderr + 1; // 3
+    _f->file = NULL;
+    list_push_front(&t->file_list, &_f->file_elem);
+  } 
+
+   /**< 尝试复用描述符 */
+  for(e = list_begin(&t->file_list); e != list_end(&t->file_list); e = list_next(e)) {
+    _f = list_entry (e, struct _file, file_elem);
+    fd = (fd > _f->fd) ? fd : _f->fd;
+    if(_f->file == NULL) {
+      break;
     }
   }
-  return -1;
+
+  /**< 需要重新创建 */
+  if(e == list_end(&t->file_list)) {
+    _f = malloc(sizeof(struct _file));
+    _f->fd = ++fd;
+    list_push_back(&t->file_list, &_f->file_elem);
+  }
+
+  _f->file = file_temp;
+
+  fslk_release();
+  return fd;
 }
+
+static void
+fd_close (int fd) {
+  fslk_acquire();
+  struct file *file_temp;
+  struct thread *t = thread_current();
+  struct list_elem *e;
+  struct _file *_f;
+
+  for(e = list_begin(&t->file_list); e != list_end(&t->file_list); e = list_next(e)) {
+    _f = list_entry (e, struct _file, file_elem);
+    if(_f->fd == fd) {
+      break;
+    }
+  }
+  if(e != list_end (&t->file_list)) {
+    file_close (_f->file); /**< 关闭文件 */
+    _f->file = NULL; /**< 设置标志: 该fd可重用*/
+  } 
+
+  fslk_release();
+}
+
 static int
 fd2file (int fd,struct file *f)
 {
-  struct thread * tcb = thread_current();
-  if (fd > -1 && fd < NOFILE && tcb->ofile[fd] != 0) {
-    f = tcb->ofile[fd];
-    return 0;
-  }
   return -1;
 }
 static int
 delete_fd (int fd) {
-  struct thread * tcb = thread_current();
-  if (fd > -1 && fd < NOFILE && tcb->ofile[fd] != 0) {
-    tcb->ofile[fd] = 0;
-    return 0;
-  }
   return -1;
 }
 
@@ -124,18 +169,33 @@ SYS_wait (struct intr_frame *f) {
   f->eax = process_wait(p_id);
 }
 
-
+// 也是很抽象, `filesys_create`也不是并发安全的
+// 那我们需要添加一个全局的锁用来保护create和remove
 static void SYS_create (struct intr_frame *f) {
-  error_exit();
+  const char *file_name = (char *)check_ptr((void *)arg_int32(1, f));
+  unsigned initial_size = (unsigned)arg_int32(2, f);
+  fslk_acquire();
+  f->eax = filesys_create(file_name, initial_size);
+  fslk_release();
 }
 
 static void SYS_remove (struct intr_frame *f) {
-  error_exit();
+  const char *file_name = (char *)check_ptr((void *)arg_int32(1, f));
+  fslk_acquire();
+  f->eax = filesys_remove(file_name);
+  fslk_release();
 }
 
 static void
 SYS_open(struct intr_frame *f) {
-  error_exit();
+  const char *file_name = (char *)check_ptr((void *)arg_int32(1, f));
+  f->eax = fd_alloc(file_name);
+}
+
+static void
+SYS_close (struct intr_frame *f) {
+  int fd = (int)arg_int32(1, f);
+  fd_close(fd);
 }
 
 
@@ -169,11 +229,6 @@ static void SYS_seek (struct intr_frame *f) {
 }
 
 static void SYS_tell (struct intr_frame *f) {
-  error_exit();
-}
-
-static void
-SYS_close (struct intr_frame *f) {
   error_exit();
 }
 

@@ -156,7 +156,7 @@ process_wait (tid_t child_tid UNUSED)
   /**< 该子线程执行完 */
   list_remove(e);
   int exit_status = c->exit_status;
-  free(c); /**< 该资源交给父线程来释放, 子线程self只用于获取使用权 */
+  free(c); /**< 父线程确认子线程死亡, 释放该空间 */
   return exit_status;
 }
 
