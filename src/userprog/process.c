@@ -358,6 +358,14 @@ load (const char *file_name, void (**eip) (void), void **esp)
       goto done; 
   }
 
+  /* 处理第一个打开的文件: 自身 */
+  // struct _file *_f = malloc(sizeof(struct _file));
+  // _f->fd = 3;
+  // list_push_back(&t->file_list, &_f->file_elem);
+  // fslk_acquire();
+  // file_deny_write(file);
+  // fslk_release();
+
   /* Read and verify executable header. */
   if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
       || memcmp (ehdr.e_ident, "\177ELF\1\1\1", 7)

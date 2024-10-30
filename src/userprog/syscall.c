@@ -1,6 +1,7 @@
 #include "userprog/syscall.h"
 #include "userprog/process.h"
 #include <stdio.h>
+#include <string.h>
 #include <syscall-nr.h>
 #include "threads/interrupt.h"
 #include "threads/thread.h"
@@ -102,7 +103,7 @@ fd_alloc (const char *file_name)
 
   if(list_empty(&t->file_list)) { /**< 初次分配 */
     _f = malloc(sizeof(struct _file));
-    _f->fd = stderr + 1; // 3
+    _f->fd = 3; // stderr + 1
     _f->file = NULL;
     list_push_front(&t->file_list, &_f->file_elem);
   } 
@@ -124,6 +125,10 @@ fd_alloc (const char *file_name)
   }
 
   _f->file = file_temp;
+
+  if(!strcmp(file_name, t->name)) {
+    file_deny_write(file_temp);
+  }
 
   fslk_release();
   return fd;
